@@ -7697,7 +7697,8 @@ function PayRunsView({
   setPayruns: React.Dispatch<React.SetStateAction<Payrun[]>>
 }) {
   const toast = useToast()
-  const augustRun = payruns.find((p) => p.period === "August 2026") ?? payruns[0]
+  const augustRun =
+    payruns.find((p) => p.period === "August 2026") ?? payruns[0] ?? null
   const [screen, setScreen] = useState<"runs" | "summary">("runs")
   const [payrollTab, setPayrollTab] = useState<"run" | "history">("run")
   const [activeTab, setActiveTab] = useState("employees")
@@ -7713,7 +7714,11 @@ function PayRunsView({
     onOk: () => void
   } | null>(null)
 
-  const advance = (pr: Payrun) => {
+  const advance = (pr?: Payrun | null) => {
+    if (!pr) {
+      toast("Create a pay run before recording payment", "warning")
+      return
+    }
     const idx = PAYRUN_STEPS.indexOf(pr.status)
     if (idx >= PAYRUN_STEPS.length - 1) return
     const next = PAYRUN_STEPS[idx + 1]
@@ -7783,189 +7788,189 @@ function PayRunsView({
     donations: 0,
     deductions: 0,
   }
-  const miniButton: React.CSSProperties = {
-    height: 36,
-    padding: "0 13px",
-    borderRadius: 5,
-    border: "1px solid #dde2ed",
-    background: "#fff",
-    color: "#202434",
-    fontSize: 13,
-    fontWeight: 600,
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 7,
-    cursor: "pointer",
-    fontFamily: "inherit",
-  }
   const iconButton: React.CSSProperties = {
-    width: 36,
-    height: 36,
-    borderRadius: 5,
-    border: "1px solid #dde2ed",
-    background: "#fff",
-    color: "#4d566f",
+    width: 32,
+    height: 32,
+    borderRadius: 4,
+    border: `1px solid ${F.border}`,
+    background: F.card,
+    color: F.text2,
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
     cursor: "pointer",
+    fontFamily: "inherit",
   }
 
   return (
-    <div
-      style={{
-        minHeight: "calc(100vh - 92px)",
-        margin: "-22px -26px",
-        background: "#f8f9fc",
-        color: "#242837",
-        overflow: "auto",
-      }}
-    >
+    <div>
         {screen === "runs" ? (
           <>
-            <div style={{ height: 72, display: "flex", alignItems: "end", justifyContent: "space-between", borderBottom: "1px solid #e7eaf1", padding: "0 28px", background: "#fff" }}>
-              <div style={{ display: "flex", gap: 24, alignItems: "end", height: "100%" }}>
-                {[["run", "Run Payroll"], ["history", "Payroll History"]].map(([id, tab]) => (
-                  <button key={id} onClick={() => setPayrollTab(id as "run" | "history")} style={{ height: 49, border: 0, borderBottom: payrollTab === id ? "3px solid #2d7df0" : "3px solid transparent", background: "transparent", color: payrollTab === id ? "#252b3b" : "#747b94", fontSize: 16, fontWeight: payrollTab === id ? 700 : 500, fontFamily: "inherit", cursor: "pointer" }}>
-                    {tab}
-                  </button>
-                ))}
-              </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 18 }}>
+              <TabBar
+                tabs={[
+                  { id: "run", label: "Run Payroll" },
+                  { id: "history", label: "Payroll History" },
+                ]}
+                active={payrollTab}
+                onSelect={(id) => setPayrollTab(id as "run" | "history")}
+              />
               {payrollTab === "run" && (
-                <div style={{ display: "flex", gap: 15, alignItems: "center", paddingBottom: 19 }}>
-                  <button style={miniButton} onClick={() => setShowNew(true)}>+ New⌄</button>
-                  <button style={{ ...miniButton, width: 36, justifyContent: "center", background: "#ff7b21", color: "#fff", borderColor: "#ff7b21", fontSize: 18 }}>?</button>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <Btn onClick={() => setShowNew(true)}>+ New</Btn>
+                  <Btn variant="secondary" onClick={() => toast("Payroll help opened", "info")}>?</Btn>
                 </div>
               )}
             </div>
             {payrollTab === "run" ? (
-              <div style={{ padding: "40px 28px" }}>
-                <div style={{ width: "min(1120px, 100%)", minHeight: 228, border: "1px solid #e3e7f0", borderRadius: 10, background: "#fff", boxShadow: "0 2px 8px rgba(25,35,60,.035)", padding: "27px 25px 24px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 20, color: "#252b3b", marginBottom: 36 }}>
-                    <span>Process Pay Run for <b>August 2026</b></span>
-                    <span style={{ background: "#ff9646", color: "#fff", borderRadius: 3, padding: "3px 7px", fontSize: 11, fontWeight: 800 }}>PAYMENT DUE</span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "220px 180px 1fr auto", alignItems: "center", gap: 28 }}>
-                    <div><div style={{ color: "#65708e", fontSize: 14, fontWeight: 600 }}>Employees' Net Pay</div><div style={{ marginTop: 10, fontSize: 20, fontWeight: 800 }}>{inr(demoPayroll.netPay)}.00</div></div>
-                    <div><div style={{ color: "#65708e", fontSize: 14, fontWeight: 600 }}>Payment Date</div><div style={{ marginTop: 10, fontSize: 17, fontWeight: 800 }}>{demoPayroll.paymentDate}</div></div>
-                    <div><div style={{ color: "#65708e", fontSize: 14, fontWeight: 600 }}>No. of Employees</div><div style={{ marginTop: 10, fontSize: 17, fontWeight: 800 }}>1</div></div>
-                    <button onClick={() => setScreen("summary")} style={{ ...miniButton, height: 40, justifyContent: "center", background: "#3e8df4", color: "#fff", borderColor: "#3e8df4", fontSize: 14 }}>View Details & Pay</button>
-                  </div>
-                  <div style={{ marginTop: 32, color: "#65708e", fontSize: 14, fontWeight: 600 }}>ⓘ This payment is overdue by 8 days.</div>
+              <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, padding: 22 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
+                  <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: F.text1 }}>
+                    Process Pay Run for August 2026
+                  </h2>
+                  <Badge label="Payment Due" color={F.warning} bg={F.warningBg} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(170px, 1fr)) auto", alignItems: "end", gap: 16 }}>
+                  <Tile label="Employees' Net Pay" value={inr(demoPayroll.netPay)} />
+                  <Tile label="Payment Date" value={demoPayroll.paymentDate} />
+                  <Tile label="No. of Employees" value="1" />
+                  <Btn onClick={() => setScreen("summary")}>View Details & Pay</Btn>
+                </div>
+                <div style={{ marginTop: 18, padding: "10px 12px", background: F.warningBg, borderLeft: `3px solid ${F.warning}`, color: F.text1, fontSize: 13 }}>
+                  This payment is overdue by 8 days.
                 </div>
               </div>
             ) : (
-              <>
-                <div style={{ height: 76, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid #e8ecf4", background: "#fbfbff" }}>
-                  <button style={{ ...miniButton, height: 40, fontSize: 22, fontWeight: 600, color: "#3f475d" }}>Payroll Type: <b>All</b>⌄</button>
+              <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ padding: 16, borderBottom: `1px solid ${F.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: F.text1 }}>Payroll History</h2>
+                  <Btn variant="secondary" onClick={() => toast("Payroll history filtered", "info")}>Payroll Type: All</Btn>
                 </div>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
                   <thead>
-                    <tr style={{ background: "#f6f7fc" }}>
-                      {["PAYMENT DATE", "PAYROLL TYPE", "DETAILS", "PAYROLL STATUS"].map((h) => (
-                        <th key={h} style={{ textAlign: "left", padding: "20px", color: "#68708d", fontSize: 18, fontWeight: 800, letterSpacing: "0.05em" }}>{h}</th>
-                      ))}
+                    <tr>
+                      <Th>Payment Date</Th>
+                      <Th>Payroll Type</Th>
+                      <Th>Details</Th>
+                      <Th>Payroll Status</Th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr style={{ borderBottom: "1px solid #edf0f8" }}>
-                      <td style={{ padding: "24px 20px", fontSize: 23 }}>31/07/2026</td>
-                      <td style={{ padding: "24px 20px", fontSize: 23 }}>Regular Payroll</td>
-                      <td style={{ padding: "24px 20px", fontSize: 23 }}>01/07/2026 - 31/07/2026</td>
-                      <td style={{ padding: "24px 20px" }}><span style={{ background: "#d7f4e8", color: "#266651", borderRadius: 6, padding: "7px 12px", fontSize: 20, fontWeight: 800 }}>Paid</span></td>
+                    <tr style={{ borderBottom: `1px solid ${F.border}` }}>
+                      <Td>31/07/2026</Td>
+                      <Td>Regular Payroll</Td>
+                      <Td>01/07/2026 - 31/07/2026</Td>
+                      <Td><Badge label="Paid" color={F.success} bg={F.successBg} /></Td>
                     </tr>
                   </tbody>
                 </table>
-              </>
+              </div>
             )}
           </>
-        ) : (
+        ) : currentRun ? (
           <>
-            <div style={{ minHeight: 142, background: "#fbfbff", borderBottom: "1px solid #edf0f8" }}>
-              <div style={{ height: 68, display: "flex", alignItems: "center", padding: "0 28px", gap: 14 }}>
-                <button onClick={() => setScreen("runs")} style={{ width: 31, height: 31, borderRadius: "50%", border: 0, background: "#e9f1ff", color: "#3584ee", fontSize: 25, cursor: "pointer" }}>‹</button>
-                <div style={{ fontSize: 22, fontWeight: 600 }}>Regular Payroll for August 2026</div>
-                <span style={{ background: "#ff9646", color: "#fff", borderRadius: 3, padding: "4px 7px", fontSize: 11, fontWeight: 800 }}>PAYMENT DUE</span>
-                <div style={{ flex: 1 }} />
-                <button style={iconButton}>▱</button>
-                <button onClick={() => advance(currentRun)} style={{ ...miniButton, background: "#3e8df4", borderColor: "#3e8df4", color: "#fff", fontSize: 13 }}>Record Payment</button>
-                <button style={iconButton}>•••</button>
-                <button style={{ ...iconButton, background: "#ff7b21", color: "#fff", borderColor: "#ff7b21", fontSize: 22 }}>?</button>
-              </div>
-              <div style={{ background: "#fff0f1", color: "#5b161a", minHeight: 48, display: "flex", alignItems: "center", gap: 10, padding: "10px 28px", fontSize: 14 }}>
-                <span style={{ color: "#ff5363", fontSize: 19 }}>ⓘ</span>
-                This payment is overdue by 8 days. As per <span style={{ color: "#2d7df0" }}>labour laws</span>, salaries must be credited by the 7th of every month.
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+              <button onClick={() => setScreen("runs")} style={iconButton}>‹</button>
+              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: F.text1 }}>
+                Regular Payroll for August 2026
+              </h1>
+              <Badge label="Payment Due" color={F.warning} bg={F.warningBg} />
+              <div style={{ flex: 1 }} />
+              <button style={iconButton}>▱</button>
+              <Btn onClick={() => advance(currentRun)}>Record Payment</Btn>
+              <button style={iconButton}>•••</button>
             </div>
-            <div style={{ padding: "28px 28px 0", background: "#f8f9fc" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(420px, 1.1fr) 160px minmax(300px, 1fr)", gap: 20, alignItems: "stretch", marginBottom: 32 }}>
-                <div style={{ background: "#eef1f9", border: "1px solid #e3e7f1", borderRadius: 8, padding: "23px 22px" }}>
-                  <div style={{ fontSize: 14, color: "#2f3548", marginBottom: 27 }}>Period: <b>{demoPayroll.period}</b> <span style={{ color: "#a0a5b4", margin: "0 8px" }}>|</span> <span style={{ fontSize: 13 }}>{demoPayroll.baseDays} Base Days</span></div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 30 }}>
-                    <div><div style={{ fontSize: 22 }}>{inr(demoPayroll.payrollCost)}</div><div style={{ color: "#8b92a5", fontSize: 12, fontWeight: 800, marginTop: 9 }}>PAYROLL COST</div></div>
-                    <div><div style={{ fontSize: 22 }}>{inr(demoPayroll.netPay)}.00</div><div style={{ color: "#8b92a5", fontSize: 12, fontWeight: 800, marginTop: 9 }}>TOTAL NET PAY</div></div>
-                  </div>
+            <div style={{ marginBottom: 18, padding: "11px 14px", background: F.errorBg, borderLeft: `3px solid ${F.error}`, color: F.text1, fontSize: 13 }}>
+              This payment is overdue by 8 days. As per labour laws, salaries must be credited by the 7th of every month.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(360px, 1.1fr) 180px minmax(260px, .9fr)", gap: 16, alignItems: "stretch", marginBottom: 18 }}>
+              <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, padding: 18 }}>
+                <div style={{ fontSize: 13, color: F.text2, marginBottom: 18 }}>
+                  Period: <strong style={{ color: F.text1 }}>{demoPayroll.period}</strong>
+                  <span style={{ color: F.text3, margin: "0 8px" }}>|</span>
+                  {demoPayroll.baseDays} Base Days
                 </div>
-                <div style={{ background: "#fff", border: "1px solid #e9edf6", borderRadius: 8, textAlign: "center", padding: "24px 20px" }}>
-                  <div style={{ color: "#9a9da6", fontSize: 13, fontWeight: 800 }}>PAY DAY</div>
-                  <div style={{ color: "#222942", fontSize: 32, marginTop: 9 }}>{demoPayroll.payDay}</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, marginTop: 6 }}>{demoPayroll.month}</div>
-                  <div style={{ height: 1, background: "#e9edf6", margin: "20px 0 12px" }} />
-                  <div style={{ fontSize: 14, fontWeight: 650 }}>1 Employees</div>
-                </div>
-                <div style={{ padding: "12px 0 0", fontSize: 14 }}>
-                  <div style={{ fontSize: 19, color: "#7b7f8d", marginBottom: 12 }}>Taxes & Deductions</div>
-                  {[["Taxes", demoPayroll.taxes], ["Benefits", demoPayroll.benefits], ["Donations", demoPayroll.donations], ["Total Deductions", demoPayroll.deductions]].map(([label, value]) => (
-                    <div key={String(label)} style={{ display: "grid", gridTemplateColumns: "150px 1fr", marginBottom: 13 }}>
-                      <span style={{ color: "#6c7181" }}>{label}</span>
-                      <b>{inr(Number(value))}.00</b>
-                    </div>
-                  ))}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                  <Tile label="Payroll Cost" value={inr(demoPayroll.payrollCost)} />
+                  <Tile label="Total Net Pay" value={inr(demoPayroll.netPay)} />
                 </div>
               </div>
-              <div style={{ display: "flex", borderBottom: "1px solid #e5e9f1", height: 46 }}>
-                {[["employees", "Employee Summary"], ["taxes", "Taxes & Deductions"], ["insights", "Overall Insights"]].map(([id, label]) => (
-                  <button key={id} onClick={() => setActiveTab(id)} style={{ padding: "0 18px", border: 0, borderTop: activeTab === id ? "3px solid #2d7df0" : "3px solid transparent", background: activeTab === id ? "#fff" : "transparent", fontSize: 14, fontWeight: 650, color: "#292d39", fontFamily: "inherit", cursor: "pointer" }}>{label}</button>
+              <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, padding: 18, textAlign: "center" }}>
+                <div style={{ fontSize: 11, color: F.text2, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pay Day</div>
+                <div style={{ fontSize: 30, fontWeight: 800, color: F.text1, marginTop: 8 }}>{demoPayroll.payDay}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: F.text1 }}>{demoPayroll.month}</div>
+                <div style={{ height: 1, background: F.border, margin: "16px 0 12px" }} />
+                <div style={{ fontSize: 13, color: F.text2 }}><strong style={{ color: F.text1 }}>1</strong> Employee</div>
+              </div>
+              <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, padding: 18 }}>
+                <h3 style={{ margin: "0 0 12px", fontSize: 16, color: F.text1 }}>Taxes & Deductions</h3>
+                {[["Taxes", demoPayroll.taxes], ["Benefits", demoPayroll.benefits], ["Donations", demoPayroll.donations], ["Total Deductions", demoPayroll.deductions]].map(([label, value]) => (
+                  <div key={String(label)} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, marginBottom: 10, fontSize: 13 }}>
+                    <span style={{ color: F.text2 }}>{label}</span>
+                    <strong style={{ color: F.text1 }}>{inr(Number(value))}</strong>
+                  </div>
                 ))}
               </div>
             </div>
-            <div style={{ background: "#fff" }}>
-              <div style={{ height: 81, display: "flex", alignItems: "center", padding: "0 25px 0 38px", gap: 24, borderBottom: "1px solid #edf0f8" }}>
-                <div style={{ fontSize: 24, fontWeight: 500 }}>All Employees⌄</div>
-                <div style={{ width: 250, height: 49, border: "1px solid #e5e9f1", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 15px", color: "#737b91", fontSize: 17 }}>Search Employee⌄</div>
+            <TabBar
+              tabs={[
+                { id: "employees", label: "Employee Summary" },
+                { id: "taxes", label: "Taxes & Deductions" },
+                { id: "insights", label: "Overall Insights" },
+              ]}
+              active={activeTab}
+              onSelect={setActiveTab}
+            />
+            <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, overflow: "hidden", marginTop: 16 }}>
+              <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${F.border}` }}>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: F.text1 }}>All Employees</h2>
+                <input style={{ ...iSt, width: 240 }} placeholder="Search Employee" />
                 <div style={{ flex: 1 }} />
-                <button style={iconButton}>▽</button>
-                <button onClick={() => toast("Payroll data exported", "success")} style={miniButton}>⇧ Export Data⌄</button>
+                <Btn variant="secondary" onClick={() => toast("Payroll filters opened", "info")}>Filter</Btn>
+                <Btn variant="secondary" onClick={() => toast("Payroll data exported", "success")}>Export Data</Btn>
               </div>
               {activeTab === "employees" ? (
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
                   <thead>
-                    <tr style={{ background: "#f6f7fc" }}>
-                      {["□", "EMPLOYEE NAME", "PAID DAYS", "NET PAY", "PAYSLIP", "TDS SHEET", "PAYMENT MODE", "PAYMENT STATUS"].map((h) => (
-                        <th key={h} style={{ textAlign: h === "NET PAY" ? "right" : "left", padding: "14px 30px", color: "#68708d", fontSize: 14, fontWeight: 800, letterSpacing: "0.04em" }}>{h}</th>
-                      ))}
+                    <tr>
+                      <Th>Employee Name</Th>
+                      <Th right>Paid Days</Th>
+                      <Th right>Net Pay</Th>
+                      <Th>Payslip</Th>
+                      <Th>TDS Sheet</Th>
+                      <Th>Payment Mode</Th>
+                      <Th>Payment Status</Th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr style={{ borderBottom: "1px solid #edf0f8" }}>
-                      <td style={{ padding: "19px 30px", fontSize: 18 }}>□</td>
-                      <td style={{ padding: "19px 30px", fontSize: 16, fontWeight: 750 }}>{demoPayroll.employeeName} ({demoPayroll.employeeCode})</td>
-                      <td style={{ padding: "19px 30px", fontSize: 17 }}>31</td>
-                      <td style={{ padding: "19px 30px", textAlign: "right", fontSize: 17, fontWeight: 800 }}>{inr(demoPayroll.netPay)}.00</td>
-                      <td style={{ padding: "19px 30px", color: "#1f78ea", fontSize: 18, fontWeight: 550 }}>View</td>
-                      <td style={{ padding: "19px 30px", color: "#1f78ea", fontSize: 18, fontWeight: 550 }}>View</td>
-                      <td style={{ padding: "19px 30px", fontSize: 17 }}>Cash</td>
-                      <td style={{ padding: "19px 30px", fontSize: 17 }}>Yet To Pay</td>
+                    <tr style={{ borderBottom: `1px solid ${F.border}` }}>
+                      <Td><strong>{demoPayroll.employeeName}</strong><br /><span style={{ color: F.text3 }}>{demoPayroll.employeeCode}</span></Td>
+                      <Td right>31</Td>
+                      <Td right><strong>{inr(demoPayroll.netPay)}</strong></Td>
+                      <Td><button style={{ color: F.brand, border: 0, background: "transparent", cursor: "pointer", fontWeight: 600 }}>View</button></Td>
+                      <Td><button style={{ color: F.brand, border: 0, background: "transparent", cursor: "pointer", fontWeight: 600 }}>View</button></Td>
+                      <Td>Cash</Td>
+                      <Td><Badge label="Yet To Pay" color={F.warning} bg={F.warningBg} /></Td>
                     </tr>
                   </tbody>
                 </table>
               ) : (
-                <div style={{ padding: 38, color: "#616980", fontSize: 18 }}>
+                <div style={{ padding: 22, color: F.text2, fontSize: 13 }}>
                   {activeTab === "taxes" ? "Taxes, benefits, donations, and deduction rows appear here." : "Payroll insights and variance details appear here."}
                 </div>
               )}
             </div>
           </>
+        ) : (
+          <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, padding: 24 }}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 18, color: F.text1 }}>
+              No pay run available
+            </h2>
+            <p style={{ margin: "0 0 16px", color: F.text2, fontSize: 13 }}>
+              Create a new pay run to review employee payroll and record payment.
+            </p>
+            <Btn onClick={() => setScreen("runs")}>Back to Pay Runs</Btn>
+          </div>
         )}
       {showNew && (
         <Modal title="Create New Pay Run" onClose={() => setShowNew(false)}>
