@@ -1,9 +1,10 @@
-import {
+import React, {
   useState,
   createContext,
   useContext,
   useCallback,
   useEffect,
+  Fragment,
 } from "react"
 
 const F = {
@@ -37,6 +38,73 @@ const ToastCtx = createContext<(msg: string, type?: ToastType) => void>(
 )
 const useToast = () => useContext(ToastCtx)
 
+function getTimeGreeting() {
+  const hour = new Date().getHours()
+  if (hour >= 4 && hour < 12) {
+    return { text: "Good morning", icon: "☀️" }
+  } else if (hour >= 12 && hour < 17) {
+    return { text: "Good afternoon", icon: "🌤️" }
+  } else {
+    return { text: "Good evening", icon: "🌙" }
+  }
+}
+
+function LiveClock() {
+  const [timeStr, setTimeStr] = useState("")
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date()
+      let hours = now.getHours()
+      const minutes = String(now.getMinutes()).padStart(2, "0")
+      const seconds = String(now.getSeconds()).padStart(2, "0")
+      const ampm = hours >= 12 ? "pm" : "am"
+      hours = hours % 12
+      hours = hours ? hours : 12
+      const formattedHours = String(hours).padStart(2, "0")
+      setTimeStr(`${formattedHours}:${minutes}:${seconds} ${ampm}`)
+    }
+    updateTime()
+    const timer = setInterval(updateTime, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  if (!timeStr) return null
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        background: "#FFFFFF",
+        color: "#0F172A",
+        padding: "5px 14px",
+        borderRadius: 20,
+        fontSize: 13,
+        fontWeight: 700,
+        boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
+        border: "1px solid rgba(255,255,255,0.4)",
+        letterSpacing: "0.02em",
+        marginRight: 4,
+      }}
+    >
+      <span
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: "#0070F2",
+          boxShadow: "0 0 0 3px rgba(0, 112, 242, 0.2)",
+          display: "inline-block",
+        }}
+      />
+      <span>{timeStr}</span>
+    </div>
+  )
+}
+
+
 type Persona = "org_admin" | "product_admin" | "employee"
 type EmpStatus = "Active" | "Inactive" | "On Leave" | "Incomplete"
 type OrgStatus = "Active" | "Draft" | "Inactive" | "Suspended"
@@ -52,6 +120,7 @@ interface Employee {
   empType: "Full-Time" | "Part-Time" | "Contract"
   manager: string
   location: string
+  mobile?: string
   status: EmpStatus
   salaryStructure: string
   grossSalary: number
@@ -179,6 +248,7 @@ const INIT_EMPS: Employee[] = [
     empType: "Full-Time",
     manager: "Rajesh Kumar",
     location: "Bangalore",
+    mobile: "+91 98765 43210",
     status: "Active",
     salaryStructure: "Senior Engineer",
     grossSalary: 110000,
@@ -2139,13 +2209,7 @@ function DashboardView({
     .sort((a, b) => b.net - a.net)
 
   // Time-based greeting calculation
-  const currentHour = new Date().getHours()
-  const greeting =
-    currentHour < 12
-      ? "Good morning"
-      : currentHour < 17
-        ? "Good afternoon"
-        : "Good evening"
+  const { text: greeting, icon: greetingIcon } = getTimeGreeting()
   const adminName = "Meena Iyer"
 
   const CardIcon = ({
@@ -5307,8 +5371,10 @@ function BulkUploadPage({
 
   const [step, setStep] = useState<"upload" | "preview" | "done">("upload")
   const [rows, setRows] = useState<ParsedRow[]>([])
+  const [importedList, setImportedList] = useState<Employee[]>([])
   const [dragging, setDragging] = useState(false)
-  const fileRef = useState<HTMLInputElement | null>(null)
+  const [previewSearch, setPreviewSearch] = useState("")
+  const [previewFilter, setPreviewFilter] = useState<"all" | "valid" | "error" | "duplicate">("all")
 
   const TEMPLATE_CSV = `Name,Email,Department,Designation,Date of Joining,Employment Type,Location,Salary Structure
 Amit Patel,amit.patel@naxrita.in,Engineering,Software Engineer,2026-09-01,Full-Time,Bangalore,Junior Engineer
@@ -5321,13 +5387,13 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
     a.href = URL.createObjectURL(blob)
     a.download = "naxpayroll_bulk_employee_template.csv"
     a.click()
-    toast("Template downloaded", "success")
+    toast("Template downloaded successfully", "success")
   }
 
   const parseCSV = (text: string) => {
     const lines = text.trim().split("\n").filter(Boolean)
     if (lines.length < 2) {
-      toast("CSV has no data rows", "error")
+      toast("CSV file contains no data rows", "error")
       return
     }
     const headers = lines[0].split(",").map((h) => h.trim().toLowerCase())
@@ -5336,12 +5402,12 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
       const get = (key: string) => cols[headers.indexOf(key)] ?? ""
       const name = get("name")
       const email = get("email")
-      const dept = get("department")
-      const desig = get("designation")
-      const doj = get("date of joining")
+      const dept = get("department") || "Operations"
+      const desig = get("designation") || "Associate"
+      const doj = get("date of joining") || new Date().toISOString().slice(0, 10)
       const type = get("employment type") || "Full-Time"
-      const loc = get("location")
-      const struc = get("salary structure")
+      const loc = get("location") || "Corporate HQ"
+      const struc = get("salary structure") || ss[0]?.name || "Associate"
       const dup = emps.some(
         (e) => e.email.toLowerCase() === email.toLowerCase(),
       )
@@ -5350,10 +5416,10 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
       let error = ""
       if (!name || !email) {
         state = "error"
-        error = "Name/Email missing"
+        error = "Name or Email missing"
       } else if (dup) {
         state = "duplicate"
-        error = "Email already exists"
+        error = "Email already registered"
       } else if (!validSS) {
         state = "error"
         error = `Salary structure "${struc}" not found`
@@ -5373,11 +5439,12 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
     })
     setRows(parsed)
     setStep("preview")
+    toast(`Parsed ${parsed.length} rows from CSV`, "info")
   }
 
   const handleFile = (file: File) => {
     if (!file.name.endsWith(".csv")) {
-      toast("Please upload a .csv file", "error")
+      toast("Please select a valid .csv file", "error")
       return
     }
     const reader = new FileReader()
@@ -5385,9 +5452,17 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
     reader.readAsText(file)
   }
 
+  const loadDemoCSV = () => {
+    parseCSV(TEMPLATE_CSV)
+  }
+
   const importValid = () => {
-    const valid = rows.filter((r) => r.state === "valid")
-    const newEmps: Employee[] = valid.map((r, i) => ({
+    const validRows = rows.filter((r) => r.state === "valid")
+    if (validRows.length === 0) {
+      return toast("No valid rows available to import", "error")
+    }
+
+    const newEmps: Employee[] = validRows.map((r, i) => ({
       id: `EMP-${String(emps.length + i + 1).padStart(3, "0")}`,
       name: r.name,
       email: r.email,
@@ -5395,20 +5470,32 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
       designation: r.designation,
       doj: r.doj || new Date().toISOString().slice(0, 10),
       empType: r.empType as Employee["empType"],
-      manager: "",
+      manager: "Meena Iyer",
       location: r.location,
       status: "Active" as EmpStatus,
       salaryStructure: r.salaryStructure,
-      grossSalary: ss.find((s) => s.name === r.salaryStructure)?.gross ?? 0,
+      grossSalary: ss.find((s) => s.name === r.salaryStructure)?.gross ?? 60000,
     }))
-    setEmps([...emps, ...newEmps])
+
+    setEmps((prev) => [...prev, ...newEmps])
+    setImportedList(newEmps)
     setStep("done")
-    toast(`${newEmps.length} employees imported successfully`, "success")
+    toast(`Successfully imported ${newEmps.length} employees!`, "success")
   }
 
-  const valid = rows.filter((r) => r.state === "valid").length
-  const errors = rows.filter((r) => r.state === "error").length
-  const dups = rows.filter((r) => r.state === "duplicate").length
+  const validCount = rows.filter((r) => r.state === "valid").length
+  const errorCount = rows.filter((r) => r.state === "error").length
+  const dupCount = rows.filter((r) => r.state === "duplicate").length
+
+  const filteredPreviewRows = rows.filter((r) => {
+    if (previewSearch && !r.name.toLowerCase().includes(previewSearch.toLowerCase()) && !r.email.toLowerCase().includes(previewSearch.toLowerCase())) {
+      return false
+    }
+    if (previewFilter !== "all" && r.state !== previewFilter) {
+      return false
+    }
+    return true
+  })
 
   const stateColor: Record<RowState, string> = {
     valid: F.success,
@@ -5420,20 +5507,15 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
     error: F.errorBg,
     duplicate: F.warningBg,
   }
-  const stateLabel: Record<RowState, string> = {
-    valid: "Valid",
-    error: "Error",
-    duplicate: "Duplicate",
-  }
 
   return (
-    <div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Top Breadcrumb Header */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
           gap: 8,
-          marginBottom: 20,
           fontSize: 13,
           color: F.text2,
         }}
@@ -5445,7 +5527,7 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
             border: "none",
             cursor: "pointer",
             color: F.brand,
-            fontWeight: 600,
+            fontWeight: 700,
             fontSize: 13,
             fontFamily: "inherit",
             display: "flex",
@@ -5453,97 +5535,90 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
             gap: 4,
           }}
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-          Employees
+          <span>&larr;</span>
+          <span>Employees</span>
         </button>
         <span style={{ color: F.border }}>/</span>
-        <span style={{ color: F.text1, fontWeight: 600 }}>
-          Bulk Employee Upload
+        <span style={{ color: F.text1, fontWeight: 700 }}>
+          Bulk Employee Onboarding
         </span>
       </div>
 
-      {/* Step indicators */}
+      {/* Enhanced 3-Step Stepper Progress Bar */}
       <div
         style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          padding: "16px 24px",
           display: "flex",
           alignItems: "center",
-          gap: 0,
-          marginBottom: 28,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
         }}
       >
-        {(["upload", "preview", "done"] as const).map((s, i) => {
-          const done = ["upload", "preview", "done"].indexOf(step) > i
-          const active = step === s
-          const labels: Record<string, string> = {
-            upload: "1. Upload CSV",
-            preview: "2. Review & Validate",
-            done: "3. Done",
-          }
+        {[
+          { key: "upload", stepNum: 1, label: "1. Upload CSV" },
+          { key: "preview", stepNum: 2, label: "2. Review & Validate" },
+          { key: "done", stepNum: 3, label: "3. Done & Summary" },
+        ].map((item, i) => {
+          const isDone =
+            step === "done"
+              ? true
+              : step === "preview"
+              ? i === 0
+              : false
+          const isActive = step === item.key
+
           return (
-            <div
-              key={s}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                flex: i < 2 ? 1 : undefined,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Fragment key={item.key}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div
                   style={{
-                    width: 28,
-                    height: 28,
+                    width: 32,
+                    height: 32,
                     borderRadius: "50%",
-                    background: done ? F.success : active ? F.brand : F.border,
+                    background: isDone
+                      ? F.success
+                      : isActive
+                      ? F.brand
+                      : F.pageBg,
+                    border: `2px solid ${
+                      isDone
+                        ? F.success
+                        : isActive
+                        ? F.brand
+                        : F.border
+                    }`,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    transition: "all 0.2s ease",
                   }}
                 >
-                  {done ? (
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="#fff"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
+                  {isDone ? (
+                    <span style={{ color: "#FFFFFF", fontWeight: 800, fontSize: 14 }}>
+                      ✓
+                    </span>
                   ) : (
                     <span
                       style={{
-                        fontSize: 12,
-                        fontWeight: 700,
-                        color: active ? "#fff" : F.text2,
+                        fontSize: 13,
+                        fontWeight: 800,
+                        color: isActive ? "#FFFFFF" : F.text2,
                       }}
                     >
-                      {i + 1}
+                      {item.stepNum}
                     </span>
                   )}
                 </div>
                 <span
                   style={{
                     fontSize: 13,
-                    fontWeight: active ? 700 : 400,
-                    color: active ? F.text1 : F.text3,
+                    fontWeight: isActive || isDone ? 700 : 500,
+                    color: isActive ? F.brand : isDone ? F.success : F.text2,
                   }}
                 >
-                  {labels[s]}
+                  {item.label}
                 </span>
               </div>
               {i < 2 && (
@@ -5551,21 +5626,21 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
                   style={{
                     flex: 1,
                     height: 2,
-                    background: done ? F.success : F.border,
-                    margin: "0 12px",
+                    background: isDone ? F.success : F.border,
+                    margin: "0 16px",
+                    transition: "background 0.3s ease",
                   }}
                 />
               )}
-            </div>
+            </Fragment>
           )
         })}
       </div>
 
+      {/* STEP 1: UPLOAD CSV */}
       {step === "upload" && (
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 18 }}
-        >
-          {/* Drop zone */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 20 }}>
+          {/* Dropzone Container */}
           <div
             onDragOver={(e) => {
               e.preventDefault()
@@ -5582,96 +5657,83 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
               background: dragging ? F.infoBg : F.card,
               border: `2px dashed ${dragging ? F.brand : F.border}`,
               borderRadius: 12,
-              padding: "56px 40px",
+              padding: "60px 40px",
               textAlign: "center",
-              cursor: "pointer",
-              transition: "all 0.15s",
-            }}
-            onClick={() => {
-              const i = document.createElement("input")
-              i.type = "file"
-              i.accept = ".csv"
-              i.onchange = (e) => {
-                const f = (e.target as HTMLInputElement).files?.[0]
-                if (f) handleFile(f)
-              }
-              i.click()
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
+              transition: "all 0.2s ease",
             }}
           >
             <div
               style={{
-                width: 56,
-                height: 56,
-                borderRadius: 14,
-                background: `${F.brand}12`,
+                width: 64,
+                height: 64,
+                borderRadius: "50%",
+                background: F.infoBg,
+                border: `1px solid ${F.brand}30`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                margin: "0 auto 16px",
+                fontSize: 28,
+                marginBottom: 16,
+                color: F.brand,
               }}
             >
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke={F.brand}
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="16 16 12 12 8 16" />
-                <line x1="12" y1="12" x2="12" y2="21" />
-                <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
-              </svg>
+              ☁️
             </div>
-            <div
-              style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: F.text1,
-                marginBottom: 6,
-              }}
-            >
+            <div style={{ fontSize: 17, fontWeight: 800, color: F.text1, marginBottom: 6 }}>
               Drop your CSV file here
             </div>
-            <div style={{ fontSize: 13, color: F.text3, marginBottom: 20 }}>
-              or click to browse · .csv files only
+            <div style={{ fontSize: 13, color: F.text2, marginBottom: 20 }}>
+              Supports standard comma-separated .csv employee records
             </div>
-            <div
-              style={{
-                display: "inline-block",
-                padding: "8px 20px",
-                background: F.brand,
-                color: "#fff",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              Browse File
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+              <Btn
+                onClick={() => {
+                  const input = document.createElement("input")
+                  input.type = "file"
+                  input.accept = ".csv"
+                  input.onchange = (e) => {
+                    const f = (e.target as HTMLInputElement).files?.[0]
+                    if (f) handleFile(f)
+                  }
+                  input.click()
+                }}
+              >
+                Browse CSV File
+              </Btn>
+              <Btn variant="secondary" onClick={loadDemoCSV}>
+                ⚡ Load Sample Demo CSV
+              </Btn>
             </div>
           </div>
 
-          {/* Instructions + template */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Guidelines Sidebar */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div
               style={{
                 background: F.card,
                 border: `1px solid ${F.border}`,
-                borderRadius: 10,
+                borderRadius: 8,
                 padding: "18px 20px",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
               }}
             >
               <div
                 style={{
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: 700,
-                  color: F.text1,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  color: F.text2,
                   marginBottom: 12,
                 }}
               >
-                Required Columns
+                Mandatory CSV Headers
               </div>
               {[
                 "Name",
@@ -5682,268 +5744,352 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
                 "Employment Type",
                 "Location",
                 "Salary Structure",
-              ].map((c) => (
+              ].map((col) => (
                 <div
-                  key={c}
+                  key={col}
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    padding: "5px 0",
-                    borderBottom: `1px solid ${F.border}`,
+                    padding: "6px 0",
+                    borderBottom: `1px solid ${F.border}60`,
                     fontSize: 12,
                   }}
                 >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke={F.success}
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  <span style={{ color: F.text2 }}>{c}</span>
+                  <span style={{ color: F.success, fontWeight: 800 }}>✓</span>
+                  <span style={{ color: F.text1, fontWeight: 600 }}>{col}</span>
                 </div>
               ))}
             </div>
+
             <div
               style={{
                 background: F.successBg,
                 border: `1px solid ${F.success}30`,
-                borderRadius: 10,
+                borderRadius: 8,
                 padding: "16px 18px",
               }}
             >
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: F.success,
-                  marginBottom: 6,
-                }}
-              >
-                Download Template
+              <div style={{ fontSize: 13, fontWeight: 700, color: F.success, marginBottom: 4 }}>
+                Download CSV Template
               </div>
-              <div style={{ fontSize: 12, color: F.text2, marginBottom: 12 }}>
-                Pre-filled CSV with correct column headers and 3 sample rows.
+              <div style={{ fontSize: 12, color: F.text2, marginBottom: 12, lineHeight: 1.4 }}>
+                Pre-formatted template with verified column headers and 3 sample entries.
               </div>
-              <Btn variant="success" onClick={downloadTemplate}>
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                Download Template CSV
+              <Btn small onClick={downloadTemplate}>
+                Download Template.csv
               </Btn>
-            </div>
-            <div
-              style={{
-                background: F.warningBg,
-                border: `1px solid ${F.warning}30`,
-                borderRadius: 10,
-                padding: "14px 18px",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: F.warning,
-                  marginBottom: 4,
-                }}
-              >
-                Note
-              </div>
-              <div style={{ fontSize: 12, color: F.text2, lineHeight: 1.6 }}>
-                Salary Structure must match an existing structure name exactly.
-                Duplicate emails will be flagged and skipped.
-              </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* STEP 2: REVIEW & VALIDATE */}
       {step === "preview" && (
-        <div>
-          {/* Summary bar */}
-          <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-            {[
-              { l: `${valid} Valid`, c: F.success, bg: F.successBg },
-              { l: `${errors} Errors`, c: F.error, bg: F.errorBg },
-              { l: `${dups} Duplicates`, c: F.warning, bg: F.warningBg },
-            ].map((x) => (
-              <div
-                key={x.l}
-                style={{
-                  padding: "8px 16px",
-                  background: x.bg,
-                  border: `1px solid ${x.c}30`,
-                  borderRadius: 6,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  color: x.c,
-                }}
-              >
-                {x.l}
-              </div>
-            ))}
-            <div style={{ flex: 1 }} />
-            <Btn
-              variant="secondary"
-              onClick={() => {
-                setRows([])
-                setStep("upload")
-              }}
-            >
-              Re-upload
-            </Btn>
-            <Btn disabled={valid === 0} onClick={importValid}>
-              Import {valid} Employees
-            </Btn>
-          </div>
-
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Summary Chips Bar */}
           <div
             style={{
               background: F.card,
               border: `1px solid ${F.border}`,
-              borderRadius: 10,
-              overflow: "hidden",
+              borderRadius: 8,
+              padding: "14px 18px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 12,
             }}
           >
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <Th>#</Th>
-                  <Th>Name</Th>
-                  <Th>Email</Th>
-                  <Th>Department</Th>
-                  <Th>Designation</Th>
-                  <Th>Salary Structure</Th>
-                  <Th>Joined</Th>
-                  <Th>Status</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <span
+                style={{
+                  padding: "6px 12px",
+                  background: F.successBg,
+                  border: `1px solid ${F.success}40`,
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: F.success,
+                }}
+              >
+                ✓ {validCount} Valid Records
+              </span>
+              <span
+                style={{
+                  padding: "6px 12px",
+                  background: errorCount > 0 ? F.errorBg : F.pageBg,
+                  border: `1px solid ${errorCount > 0 ? F.error : F.border}40`,
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: errorCount > 0 ? F.error : F.text3,
+                }}
+              >
+                &times; {errorCount} Validation Errors
+              </span>
+              <span
+                style={{
+                  padding: "6px 12px",
+                  background: dupCount > 0 ? F.warningBg : F.pageBg,
+                  border: `1px solid ${dupCount > 0 ? F.warning : F.border}40`,
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: dupCount > 0 ? F.warning : F.text3,
+                }}
+              >
+                ! {dupCount} Duplicates Skipped
+              </span>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <Btn
+                variant="secondary"
+                onClick={() => {
+                  setRows([])
+                  setStep("upload")
+                }}
+              >
+                Re-upload File
+              </Btn>
+              <Btn disabled={validCount === 0} onClick={importValid}>
+                Import {validCount} Employees &rarr;
+              </Btn>
+            </div>
+          </div>
+
+          {/* Validation Table */}
+          <div
+            style={{
+              background: F.card,
+              border: `1px solid ${F.border}`,
+              borderRadius: 8,
+              overflow: "hidden",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+            }}
+          >
+            <div
+              style={{
+                padding: "12px 18px",
+                borderBottom: `1px solid ${F.border}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <span style={{ fontSize: 13, fontWeight: 700, color: F.text1 }}>
+                CSV Record Validation Sheet ({rows.length} Total Rows)
+              </span>
+              <span style={{ fontSize: 11, color: F.text3 }}>
+                Only valid records will be written to the database.
+              </span>
+            </div>
+
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
                   <tr
-                    key={i}
                     style={{
                       borderBottom: `1px solid ${F.border}`,
-                      background:
-                        r.state !== "valid" ? stateBg[r.state] : "transparent",
+                      background: F.pageBg,
+                      color: F.text2,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
                     }}
                   >
-                    <Td>
-                      <span style={{ fontSize: 11, color: F.text3 }}>
-                        {i + 1}
-                      </span>
-                    </Td>
-                    <Td>
-                      <span style={{ fontWeight: 600 }}>{r.name || "—"}</span>
-                    </Td>
-                    <Td>
-                      <span style={{ fontSize: 12 }}>{r.email || "—"}</span>
-                    </Td>
-                    <Td>{r.department || "—"}</Td>
-                    <Td>{r.designation || "—"}</Td>
-                    <Td>{r.salaryStructure || "—"}</Td>
-                    <Td>{r.doj || "—"}</Td>
-                    <Td>
-                      <Badge
-                        label={r.error || stateLabel[r.state]}
-                        color={stateColor[r.state]}
-                        bg={stateBg[r.state]}
-                      />
-                    </Td>
+                    <th style={{ padding: "10px 14px", textAlign: "center" }}>#</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left" }}>Employee Name</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left" }}>Email Address</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left" }}>Department</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left" }}>Designation</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left" }}>Salary Structure</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left" }}>Date of Joining</th>
+                    <th style={{ padding: "10px 18px", textAlign: "center" }}>Validation Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredPreviewRows.map((r, i) => (
+                    <tr
+                      key={i}
+                      style={{
+                        borderBottom: `1px solid ${F.border}60`,
+                        background: r.state !== "valid" ? stateBg[r.state] : "transparent",
+                      }}
+                    >
+                      <td style={{ padding: "12px 14px", textAlign: "center", color: F.text3, fontSize: 11 }}>
+                        {i + 1}
+                      </td>
+                      <td style={{ padding: "12px 14px", fontWeight: 700, color: F.text1 }}>
+                        {r.name || "—"}
+                      </td>
+                      <td style={{ padding: "12px 14px", color: F.text2 }}>
+                        {r.email || "—"}
+                      </td>
+                      <td style={{ padding: "12px 14px", color: F.text2 }}>{r.department}</td>
+                      <td style={{ padding: "12px 14px", color: F.text2 }}>{r.designation}</td>
+                      <td style={{ padding: "12px 14px", color: F.brand, fontWeight: 600 }}>
+                        {r.salaryStructure}
+                      </td>
+                      <td style={{ padding: "12px 14px", color: F.text3, fontSize: 12 }}>{r.doj}</td>
+                      <td style={{ padding: "12px 18px", textAlign: "center" }}>
+                        <Badge
+                          label={r.error || "Valid"}
+                          color={stateColor[r.state]}
+                          bg={stateBg[r.state]}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
+      {/* STEP 3: DONE & SUMMARY REPORT */}
       {step === "done" && (
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 12,
-            padding: "60px 40px",
-            textAlign: "center",
-          }}
-        >
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Executive Success Card */}
           <div
             style={{
-              width: 72,
-              height: 72,
-              borderRadius: "50%",
-              background: F.successBg,
-              border: `3px solid ${F.success}`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 20px",
+              background: F.card,
+              border: `1px solid ${F.border}`,
+              borderRadius: 12,
+              padding: "40px 32px",
+              textAlign: "center",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
             }}
           >
-            <svg
-              width="32"
-              height="32"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={F.success}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          </div>
-          <div
-            style={{
-              fontSize: 22,
-              fontWeight: 800,
-              color: F.text1,
-              marginBottom: 8,
-            }}
-          >
-            Import Complete!
-          </div>
-          <div style={{ fontSize: 14, color: F.text2, marginBottom: 28 }}>
-            {valid} employees were successfully added to Naxrita Solutions.
-          </div>
-          <div style={{ display: "flex", justifyContent: "center", gap: 10 }}>
-            <Btn
-              variant="secondary"
-              onClick={() => {
-                setRows([])
-                setStep("upload")
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: "50%",
+                background: F.successBg,
+                border: `3px solid ${F.success}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px",
+                fontSize: 28,
               }}
             >
-              Upload Another File
-            </Btn>
-            <Btn onClick={onBack}>View Employees</Btn>
+              ✓
+            </div>
+            <h2
+              style={{
+                fontSize: 22,
+                fontWeight: 800,
+                color: F.text1,
+                margin: "0 0 6px",
+              }}
+            >
+              Bulk Onboarding Complete!
+            </h2>
+            <p style={{ fontSize: 14, color: F.text2, margin: "0 0 24px" }}>
+              Successfully imported <strong>{importedList.length}</strong> new employee record{importedList.length !== 1 ? "s" : ""} to Naxrita Solutions.
+            </p>
+
+            <div style={{ display: "flex", justifyContent: "center", gap: 12 }}>
+              <Btn onClick={onBack}>View All Employees &rarr;</Btn>
+              <Btn
+                variant="secondary"
+                onClick={() => {
+                  setRows([])
+                  setImportedList([])
+                  setStep("upload")
+                }}
+              >
+                Upload Another File
+              </Btn>
+            </div>
           </div>
+
+          {/* Report Sheet of Newly Imported Employees */}
+          {importedList.length > 0 && (
+            <div
+              style={{
+                background: F.card,
+                border: `1px solid ${F.border}`,
+                borderRadius: 8,
+                overflow: "hidden",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+              }}
+            >
+              <div
+                style={{
+                  padding: "14px 18px",
+                  borderBottom: `1px solid ${F.border}`,
+                  background: F.successBg,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span style={{ fontSize: 13, fontWeight: 700, color: F.success }}>
+                  Newly Assigned Employee Records
+                </span>
+                <span style={{ fontSize: 12, color: F.text2 }}>
+                  Status: Active &bull; Accounts Provisioned
+                </span>
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr
+                      style={{
+                        borderBottom: `1px solid ${F.border}`,
+                        background: F.pageBg,
+                        color: F.text2,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      <th style={{ padding: "10px 18px", textAlign: "left" }}>Assigned ID</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left" }}>Employee Name</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left" }}>Email</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left" }}>Department</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left" }}>Designation</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left" }}>Salary Structure</th>
+                      <th style={{ padding: "10px 18px", textAlign: "center" }}>Account Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importedList.map((emp) => (
+                      <tr key={emp.id} style={{ borderBottom: `1px solid ${F.border}60` }}>
+                        <td style={{ padding: "12px 18px", fontWeight: 800, color: F.brand }}>
+                          {emp.id}
+                        </td>
+                        <td style={{ padding: "12px 14px", fontWeight: 700, color: F.text1 }}>
+                          {emp.name}
+                        </td>
+                        <td style={{ padding: "12px 14px", color: F.text2 }}>{emp.email}</td>
+                        <td style={{ padding: "12px 14px", color: F.text2 }}>{emp.department}</td>
+                        <td style={{ padding: "12px 14px", color: F.text2 }}>{emp.designation}</td>
+                        <td style={{ padding: "12px 14px", color: F.text1, fontWeight: 600 }}>
+                          {emp.salaryStructure}
+                        </td>
+                        <td style={{ padding: "12px 18px", textAlign: "center" }}>
+                          <Badge label="Active" color={F.success} bg={F.successBg} dot={F.success} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-// ── Employees View (list) ─────────────────────────────────────────────────────
 function EmployeesView({
   emps,
   setEmps,
@@ -7686,77 +7832,234 @@ function SalaryManagementView({
 }
 
 function PayRunsView({
-  emps,
-  ss,
   payruns,
   setPayruns,
+  emps,
+  ss,
 }: {
-  emps: Employee[]
-  ss: SalaryStructure[]
   payruns: Payrun[]
   setPayruns: React.Dispatch<React.SetStateAction<Payrun[]>>
+  emps: Employee[]
+  ss: SalaryStructure[]
 }) {
   const toast = useToast()
-  const augustRun =
-    payruns.find((p) => p.period === "August 2026") ?? payruns[0] ?? null
-  const [screen, setScreen] = useState<"runs" | "summary">("runs")
   const [payrollTab, setPayrollTab] = useState<"run" | "history">("run")
-  const [activeTab, setActiveTab] = useState("employees")
-  const [showNew, setShowNew] = useState(false)
-  const [newPR, setNewPR] = useState({
-    period: "September 2026",
-    month: 9,
-    year: 2026,
-  })
-  const [confirm, setConfirm] = useState<{
-    msg: string
-    okLabel: string
-    onOk: () => void
+  const [activeRunId, setActiveRunId] = useState<string>(
+    payruns.find((p) => p.period === "August 2026")?.id || payruns[0]?.id || ""
+  )
+  const [currentStepIndex, setCurrentStepIndex] = useState<number>(2) // 0: Attendance, 1: Additions, 2: Review, 3: Approval
+
+  // History Filter Bar State (Draft + Applied)
+  const [showHistoryFilterBar, setShowHistoryFilterBar] = useState(true)
+
+  const [periodDraft, setPeriodDraft] = useState("")
+  const [yearDraft, setYearDraft] = useState("all")
+  const [statusDraft, setStatusDraft] = useState("all")
+  const [monthDraft, setMonthDraft] = useState("all")
+  const [minAmountDraft, setMinAmountDraft] = useState("all")
+
+  const [appliedPeriod, setAppliedPeriod] = useState("")
+  const [appliedYear, setAppliedYear] = useState("all")
+  const [appliedStatus, setAppliedStatus] = useState("all")
+  const [appliedMonth, setAppliedMonth] = useState("all")
+  const [appliedMinAmount, setAppliedMinAmount] = useState("all")
+
+  const [selectedHistoryRun, setSelectedHistoryRun] = useState<Payrun | null>(null)
+  const [showNewModal, setShowNewModal] = useState(false)
+  const [newMonth, setNewMonth] = useState(9)
+  const [newYear, setNewYear] = useState(2026)
+
+  // Editing Row Modal State
+  const [editingRow, setEditingRow] = useState<{
+    row: PayrunInputRow
+    empName: string
+    grossSalary: number
+    lopDays: number
+    bonus: number
+    incentive: number
+    tds: number
   } | null>(null)
 
-  const advance = (pr?: Payrun | null) => {
-    if (!pr) {
-      toast("Create a pay run before recording payment", "warning")
-      return
-    }
-    const idx = PAYRUN_STEPS.indexOf(pr.status)
-    if (idx >= PAYRUN_STEPS.length - 1) return
-    const next = PAYRUN_STEPS[idx + 1]
-    const msgs: Record<string, string> = {
-      Calculated: "Calculate payroll for all employees?",
-      "Under Review": "Submit for review?",
-      Approved: "Approve this payroll?",
-      Completed: "Mark payroll as completed? This is irreversible.",
-    }
-    setConfirm({
-      msg: msgs[next] ?? `Move to ${next}?`,
-      okLabel:
-        next === "Completed"
-          ? "Complete Payroll"
-          : next === "Approved"
-            ? "Approve"
-            : "Confirm",
-      onOk: () => {
-        setPayruns((prev) =>
-          prev.map((p) => (p.id === pr.id ? { ...p, status: next } : p)),
-        )
-        toast(`Pay run moved to "${next}"`, "success")
-        setConfirm(null)
-      },
-    })
+  const activeRun = payruns.find((p) => p.id === activeRunId) || payruns[0]
+
+  const f4Periods = Array.from(new Set(payruns.map((p) => p.period)))
+  const availableYears = Array.from(new Set(payruns.map((p) => String(p.year)))).sort().reverse()
+
+  // Handle Filter Go Action
+  const handleHistoryGo = () => {
+    setAppliedPeriod(periodDraft)
+    setAppliedYear(yearDraft)
+    setAppliedStatus(statusDraft)
+    setAppliedMonth(monthDraft)
+    setAppliedMinAmount(minAmountDraft)
+    toast("Payroll history filters applied", "info")
   }
 
-  const createPayrun = () => {
-    if (payruns.find((p) => p.period === newPR.period))
-      return toast("A pay run for this period already exists", "error")
+  // Handle Clear History Filters
+  const handleHistoryClear = () => {
+    setPeriodDraft("")
+    setYearDraft("all")
+    setStatusDraft("all")
+    setMonthDraft("all")
+    setMinAmountDraft("all")
+
+    setAppliedPeriod("")
+    setAppliedYear("all")
+    setAppliedStatus("all")
+    setAppliedMonth("all")
+    setAppliedMinAmount("all")
+    toast("History filters cleared", "info")
+  }
+
+  // Filtered History Runs
+  const filteredHistory = payruns.filter((p) => {
+    if (appliedPeriod && !p.period.toLowerCase().includes(appliedPeriod.toLowerCase())) {
+      return false
+    }
+    if (appliedYear !== "all" && String(p.year) !== appliedYear) {
+      return false
+    }
+    if (appliedStatus !== "all" && p.status !== appliedStatus) {
+      return false
+    }
+    if (appliedMonth !== "all" && String(p.month) !== appliedMonth) {
+      return false
+    }
+    if (appliedMinAmount !== "all") {
+      const minVal = Number(appliedMinAmount)
+      if (p.netPayroll < minVal) return false
+    }
+    return true
+  })
+
+  // Advance payrun status in lifecycle
+  const advanceRunStatus = (pr: Payrun) => {
+    const statusMap: Record<PayrunStatus, PayrunStatus> = {
+      Draft: "Calculated",
+      Calculated: "Under Review",
+      "Under Review": "Approved",
+      Approved: "Completed",
+      Completed: "Completed",
+    }
+    const nextStatus = statusMap[pr.status]
+    const updatedDate = nextStatus === "Completed" ? new Date().toISOString().slice(0, 10) : pr.generatedOn
+
+    setPayruns((prev) =>
+      prev.map((item) =>
+        item.id === pr.id
+          ? {
+              ...item,
+              status: nextStatus,
+              generatedOn: updatedDate,
+            }
+          : item
+      )
+    )
+
+    if (nextStatus === "Calculated") setCurrentStepIndex(1)
+    if (nextStatus === "Under Review") setCurrentStepIndex(2)
+    if (nextStatus === "Approved" || nextStatus === "Completed") setCurrentStepIndex(3)
+
+    toast(`Pay run ${pr.period} updated to "${nextStatus}"`, "success")
+  }
+
+  // Recalculate all employees in the active payrun
+  const handleRecalculate = () => {
+    if (!activeRun) return
+    const newRows = calcRows(emps, ss)
+    const gross = newRows.reduce((s, r) => s + r.totalEarnings, 0)
+    const deductions = newRows.reduce((s, r) => s + r.totalDeductions, 0)
+
+    setPayruns((prev) =>
+      prev.map((p) =>
+        p.id === activeRun.id
+          ? {
+              ...p,
+              grossPayroll: gross,
+              totalDeductions: deductions,
+              netPayroll: gross - deductions,
+              rows: newRows,
+              totalEmployees: newRows.length,
+            }
+          : p
+      )
+    )
+    toast(`Recalculated salary figures for ${newRows.length} employees`, "success")
+  }
+
+  // Save Row Edits
+  const handleSaveRow = () => {
+    if (!editingRow || !activeRun) return
+
+    const perDayGross = editingRow.grossSalary / 30
+    const lopDeduction = Math.round(perDayGross * editingRow.lopDays)
+    const totalEarnings = editingRow.grossSalary + editingRow.bonus + editingRow.incentive
+    const pf = Math.round(editingRow.grossSalary * 0.12 * 0.5) // ~12% of basic
+    const profTax = 200
+    const totalDeductions = lopDeduction + pf + editingRow.tds + profTax
+    const netSalary = Math.max(0, totalEarnings - totalDeductions)
+
+    const updatedRows = activeRun.rows.map((r) => {
+      if (r.empId === editingRow.row.empId) {
+        return {
+          ...r,
+          grossSalary: editingRow.grossSalary,
+          lopDays: editingRow.lopDays,
+          lopDeduction,
+          bonus: editingRow.bonus,
+          incentive: editingRow.incentive,
+          tds: editingRow.tds,
+          pf,
+          profTax,
+          totalEarnings,
+          totalDeductions,
+          netSalary,
+        }
+      }
+      return r
+    })
+
+    const newGross = updatedRows.reduce((s, r) => s + r.totalEarnings, 0)
+    const newDeductions = updatedRows.reduce((s, r) => s + r.totalDeductions, 0)
+
+    setPayruns((prev) =>
+      prev.map((p) =>
+        p.id === activeRun.id
+          ? {
+              ...p,
+              grossPayroll: newGross,
+              totalDeductions: newDeductions,
+              netPayroll: newGross - newDeductions,
+              rows: updatedRows,
+            }
+          : p
+      )
+    )
+
+    setEditingRow(null)
+    toast(`Updated salary row for ${editingRow.empName}`, "success")
+  }
+
+  // Create new payrun
+  const handleCreatePayrun = () => {
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ]
+    const periodName = `${monthNames[newMonth - 1]} ${newYear}`
+    if (payruns.some((p) => p.period === periodName)) {
+      return toast(`Pay run for ${periodName} already exists`, "error")
+    }
+
     const rows = calcRows(emps, ss)
     const gross = rows.reduce((s, r) => s + r.totalEarnings, 0)
     const deductions = rows.reduce((s, r) => s + r.totalDeductions, 0)
-    const pr: Payrun = {
-      id: `PR-2026-${String(newPR.month).padStart(2, "0")}`,
-      period: newPR.period,
-      month: newPR.month,
-      year: newPR.year,
+
+    const newPr: Payrun = {
+      id: `PR-${newYear}-${String(newMonth).padStart(2, "0")}`,
+      period: periodName,
+      month: newMonth,
+      year: newYear,
       status: "Draft",
       totalEmployees: emps.length,
       grossPayroll: gross,
@@ -7766,514 +8069,939 @@ function PayRunsView({
       generatedOn: new Date().toISOString().slice(0, 10),
       rows,
     }
-    setPayruns([pr, ...payruns])
-    setScreen("summary")
-    setShowNew(false)
-    toast(`Pay run for ${newPR.period} created`, "success")
+
+    setPayruns([newPr, ...payruns])
+    setActiveRunId(newPr.id)
+    setShowNewModal(false)
+    setCurrentStepIndex(0)
+    toast(`New Pay run for ${periodName} initialized`, "success")
   }
 
-  const currentRun = augustRun
-  const demoPayroll = {
-    period: "01/08/2026 - 31/08/2026",
-    baseDays: 31,
-    paymentDate: "01/09/2026",
-    payDay: "01",
-    month: "SEP, 2026",
-    employeeName: "Rishab Rebala",
-    employeeCode: "1100076",
-    payrollCost: 21592.43,
-    netPay: 17302,
-    taxes: 150,
-    benefits: 4140.43,
-    donations: 0,
-    deductions: 0,
+  // Export Bank Batch CSV
+  const handleExportBankBatch = () => {
+    if (!activeRun) return
+    const csvContent =
+      "Employee ID,Employee Name,Account Number,IFSC Code,Net Salary,Payment Period\n" +
+      activeRun.rows
+        .map(
+          (r, i) =>
+            `${r.empId},${r.empName},918273645${i + 10},HDFC0001234,${r.netSalary},${activeRun.period}`
+        )
+        .join("\n")
+    const blob = new Blob([csvContent], { type: "text/csv" })
+    const a = document.createElement("a")
+    a.href = URL.createObjectURL(blob)
+    a.download = `Bank_Disbursement_Batch_${activeRun.period.replace(" ", "_")}.csv`
+    a.click()
+    toast("Bank disbursement batch file generated", "success")
   }
-  const iconButton: React.CSSProperties = {
-    width: 32,
-    height: 32,
-    borderRadius: 4,
-    border: `1px solid ${F.border}`,
-    background: F.card,
-    color: F.text2,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "pointer",
-    fontFamily: "inherit",
-  }
+
+  const currentNetPay = activeRun ? activeRun.netPayroll : 0
+  const currentGross = activeRun ? activeRun.grossPayroll : 0
+  const currentDeductions = activeRun ? activeRun.totalDeductions : 0
+  const currentEmpCount = activeRun ? activeRun.totalEmployees : 0
+  const historyActiveFiltersCount =
+    (appliedPeriod ? 1 : 0) +
+    (appliedYear !== "all" ? 1 : 0) +
+    (appliedStatus !== "all" ? 1 : 0) +
+    (appliedMonth !== "all" ? 1 : 0) +
+    (appliedMinAmount !== "all" ? 1 : 0)
 
   return (
-    <div>
-        {screen === "runs" ? (
-          <>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 18 }}>
-              <TabBar
-                tabs={[
-                  { id: "run", label: "Run Payroll" },
-                  { id: "history", label: "Payroll History" },
-                ]}
-                active={payrollTab}
-                onSelect={(id) => setPayrollTab(id as "run" | "history")}
-              />
-              {payrollTab === "run" && (
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <Btn onClick={() => setShowNew(true)}>+ New</Btn>
-                  <Btn variant="secondary" onClick={() => toast("Payroll help opened", "info")}>?</Btn>
-                </div>
-              )}
-            </div>
-            {payrollTab === "run" ? (
-              <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, padding: 22 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
-                  <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: F.text1 }}>
-                    Process Pay Run for August 2026
-                  </h2>
-                  <Badge label="Payment Due" color={F.warning} bg={F.warningBg} />
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(170px, 1fr)) auto", alignItems: "end", gap: 16 }}>
-                  <Tile label="Employees' Net Pay" value={inr(demoPayroll.netPay)} />
-                  <Tile label="Payment Date" value={demoPayroll.paymentDate} />
-                  <Tile label="No. of Employees" value="1" />
-                  <Btn onClick={() => setScreen("summary")}>View Details & Pay</Btn>
-                </div>
-                <div style={{ marginTop: 18, padding: "10px 12px", background: F.warningBg, borderLeft: `3px solid ${F.warning}`, color: F.text1, fontSize: 13 }}>
-                  This payment is overdue by 8 days.
-                </div>
-              </div>
-            ) : (
-              <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, overflow: "hidden" }}>
-                <div style={{ padding: 16, borderBottom: `1px solid ${F.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: F.text1 }}>Payroll History</h2>
-                  <Btn variant="secondary" onClick={() => toast("Payroll history filtered", "info")}>Payroll Type: All</Btn>
-                </div>
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
-                  <thead>
-                    <tr>
-                      <Th>Payment Date</Th>
-                      <Th>Payroll Type</Th>
-                      <Th>Details</Th>
-                      <Th>Payroll Status</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr style={{ borderBottom: `1px solid ${F.border}` }}>
-                      <Td>31/07/2026</Td>
-                      <Td>Regular Payroll</Td>
-                      <Td>01/07/2026 - 31/07/2026</Td>
-                      <Td><Badge label="Paid" color={F.success} bg={F.successBg} /></Td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        ) : currentRun ? (
-          <>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <button onClick={() => setScreen("runs")} style={iconButton}>‹</button>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: F.text1 }}>
-                Regular Payroll for August 2026
-              </h1>
-              <Badge label="Payment Due" color={F.warning} bg={F.warningBg} />
-              <div style={{ flex: 1 }} />
-              <button style={iconButton}>▱</button>
-              <Btn onClick={() => advance(currentRun)}>Record Payment</Btn>
-              <button style={iconButton}>•••</button>
-            </div>
-            <div style={{ marginBottom: 18, padding: "11px 14px", background: F.errorBg, borderLeft: `3px solid ${F.error}`, color: F.text1, fontSize: 13 }}>
-              This payment is overdue by 8 days. As per labour laws, salaries must be credited by the 7th of every month.
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(360px, 1.1fr) 180px minmax(260px, .9fr)", gap: 16, alignItems: "stretch", marginBottom: 18 }}>
-              <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, padding: 18 }}>
-                <div style={{ fontSize: 13, color: F.text2, marginBottom: 18 }}>
-                  Period: <strong style={{ color: F.text1 }}>{demoPayroll.period}</strong>
-                  <span style={{ color: F.text3, margin: "0 8px" }}>|</span>
-                  {demoPayroll.baseDays} Base Days
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                  <Tile label="Payroll Cost" value={inr(demoPayroll.payrollCost)} />
-                  <Tile label="Total Net Pay" value={inr(demoPayroll.netPay)} />
-                </div>
-              </div>
-              <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, padding: 18, textAlign: "center" }}>
-                <div style={{ fontSize: 11, color: F.text2, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>Pay Day</div>
-                <div style={{ fontSize: 30, fontWeight: 800, color: F.text1, marginTop: 8 }}>{demoPayroll.payDay}</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: F.text1 }}>{demoPayroll.month}</div>
-                <div style={{ height: 1, background: F.border, margin: "16px 0 12px" }} />
-                <div style={{ fontSize: 13, color: F.text2 }}><strong style={{ color: F.text1 }}>1</strong> Employee</div>
-              </div>
-              <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, padding: 18 }}>
-                <h3 style={{ margin: "0 0 12px", fontSize: 16, color: F.text1 }}>Taxes & Deductions</h3>
-                {[["Taxes", demoPayroll.taxes], ["Benefits", demoPayroll.benefits], ["Donations", demoPayroll.donations], ["Total Deductions", demoPayroll.deductions]].map(([label, value]) => (
-                  <div key={String(label)} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, marginBottom: 10, fontSize: 13 }}>
-                    <span style={{ color: F.text2 }}>{label}</span>
-                    <strong style={{ color: F.text1 }}>{inr(Number(value))}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <TabBar
-              tabs={[
-                { id: "employees", label: "Employee Summary" },
-                { id: "taxes", label: "Taxes & Deductions" },
-                { id: "insights", label: "Overall Insights" },
-              ]}
-              active={activeTab}
-              onSelect={setActiveTab}
-            />
-            <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, overflow: "hidden", marginTop: 16 }}>
-              <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, borderBottom: `1px solid ${F.border}` }}>
-                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: F.text1 }}>All Employees</h2>
-                <input style={{ ...iSt, width: 240 }} placeholder="Search Employee" />
-                <div style={{ flex: 1 }} />
-                <Btn variant="secondary" onClick={() => toast("Payroll filters opened", "info")}>Filter</Btn>
-                <Btn variant="secondary" onClick={() => toast("Payroll data exported", "success")}>Export Data</Btn>
-              </div>
-              {activeTab === "employees" ? (
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
-                  <thead>
-                    <tr>
-                      <Th>Employee Name</Th>
-                      <Th right>Paid Days</Th>
-                      <Th right>Net Pay</Th>
-                      <Th>Payslip</Th>
-                      <Th>TDS Sheet</Th>
-                      <Th>Payment Mode</Th>
-                      <Th>Payment Status</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr style={{ borderBottom: `1px solid ${F.border}` }}>
-                      <Td><strong>{demoPayroll.employeeName}</strong><br /><span style={{ color: F.text3 }}>{demoPayroll.employeeCode}</span></Td>
-                      <Td right>31</Td>
-                      <Td right><strong>{inr(demoPayroll.netPay)}</strong></Td>
-                      <Td><button style={{ color: F.brand, border: 0, background: "transparent", cursor: "pointer", fontWeight: 600 }}>View</button></Td>
-                      <Td><button style={{ color: F.brand, border: 0, background: "transparent", cursor: "pointer", fontWeight: 600 }}>View</button></Td>
-                      <Td>Cash</Td>
-                      <Td><Badge label="Yet To Pay" color={F.warning} bg={F.warningBg} /></Td>
-                    </tr>
-                  </tbody>
-                </table>
-              ) : (
-                <div style={{ padding: 22, color: F.text2, fontSize: 13 }}>
-                  {activeTab === "taxes" ? "Taxes, benefits, donations, and deduction rows appear here." : "Payroll insights and variance details appear here."}
-                </div>
-              )}
-            </div>
-          </>
-        ) : (
-          <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 4, padding: 24 }}>
-            <h2 style={{ margin: "0 0 8px", fontSize: 18, color: F.text1 }}>
-              No pay run available
-            </h2>
-            <p style={{ margin: "0 0 16px", color: F.text2, fontSize: 13 }}>
-              Create a new pay run to review employee payroll and record payment.
-            </p>
-            <Btn onClick={() => setScreen("runs")}>Back to Pay Runs</Btn>
-          </div>
-        )}
-      {showNew && (
-        <Modal title="Create New Pay Run" onClose={() => setShowNew(false)}>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* Page Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 22,
+              fontWeight: 800,
+              color: F.text1,
+              letterSpacing: "-0.01em",
+            }}
           >
-            <Fld label="Period Label">
-              <input
-                style={iSt}
-                value={newPR.period}
-                onChange={(e) => setNewPR({ ...newPR, period: e.target.value })}
-              />
-            </Fld>
-            <Fld label="Month">
+            Payroll & Pay Runs
+          </h1>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
+            Execute, verify, approve, and disburse monthly employee compensation
+          </p>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Btn onClick={() => setShowNewModal(true)}>+ Create Pay Run</Btn>
+          <Btn variant="secondary" onClick={handleRecalculate}>
+            Recalculate All
+          </Btn>
+          <Btn variant="secondary" onClick={handleExportBankBatch}>
+            Export Bank Batch
+          </Btn>
+        </div>
+      </div>
+
+      {/* 4 KPI Summary Cards */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 16,
+        }}
+      >
+        <EmployeeMetricCard
+          label="Active Pay Cycle"
+          value={activeRun ? activeRun.period : "None"}
+          sub={activeRun ? `Status: ${activeRun.status}` : "No active run"}
+          accent={F.brand}
+          badgeText={activeRun ? activeRun.status : "Draft"}
+          badgeBg={F.infoBg}
+          badgeColor={F.brand}
+          progress={75}
+        />
+        <EmployeeMetricCard
+          label="Total Net Payroll"
+          value={inr(currentNetPay)}
+          sub={`From ${inr(currentGross)} gross compensation`}
+          accent={F.success}
+          badgeText="Net Payable"
+          badgeBg={F.successBg}
+          badgeColor={F.success}
+          progress={currentGross > 0 ? Math.round((currentNetPay / currentGross) * 100) : 0}
+        />
+        <EmployeeMetricCard
+          label="Statutory Deductions"
+          value={inr(currentDeductions)}
+          sub="PF (12%), TDS Withholdings & PT"
+          accent={F.warning}
+          badgeText="Withholdings"
+          badgeBg={F.warningBg}
+          badgeColor={F.warning}
+          progress={currentGross > 0 ? Math.round((currentDeductions / currentGross) * 100) : 0}
+        />
+        <EmployeeMetricCard
+          label="Eligible Employees"
+          value={`${currentEmpCount} Employees`}
+          sub="100% attendance & compensation verified"
+          accent="#8B5CF6"
+          badgeText="Verified"
+          badgeBg="#F5F3FF"
+          badgeColor="#7C3AED"
+          progress={100}
+        />
+      </div>
+
+      {/* Tabs Header in Fiori Style */}
+      <div
+        style={{
+          display: "flex",
+          borderBottom: `1px solid ${F.border}`,
+          gap: 24,
+        }}
+      >
+        <button
+          onClick={() => setPayrollTab("run")}
+          style={{
+            background: "none",
+            border: "none",
+            borderBottom: `3px solid ${payrollTab === "run" ? F.brand : "transparent"}`,
+            padding: "10px 4px",
+            fontSize: 13,
+            fontWeight: payrollTab === "run" ? 700 : 500,
+            color: payrollTab === "run" ? F.brand : F.text2,
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+          }}
+        >
+          Active Pay Run Processing
+        </button>
+        <button
+          onClick={() => setPayrollTab("history")}
+          style={{
+            background: "none",
+            border: "none",
+            borderBottom: `3px solid ${payrollTab === "history" ? F.brand : "transparent"}`,
+            padding: "10px 4px",
+            fontSize: 13,
+            fontWeight: payrollTab === "history" ? 700 : 500,
+            color: payrollTab === "history" ? F.brand : F.text2,
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+          }}
+        >
+          Payroll History & Audit Ledger
+        </button>
+      </div>
+
+      {/* TAB 1: RUN PAYROLL */}
+      {payrollTab === "run" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* Active Payrun Selector Bar */}
+          <div
+            style={{
+              background: F.card,
+              border: `1px solid ${F.border}`,
+              borderRadius: 8,
+              padding: "14px 18px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 12,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: F.text1 }}>
+                Select Active Pay Run:
+              </span>
               <select
-                style={iSt}
-                value={newPR.month}
-                onChange={(e) =>
-                  setNewPR({ ...newPR, month: Number(e.target.value) })
-                }
+                value={activeRun?.id}
+                onChange={(e) => setActiveRunId(e.target.value)}
+                style={{ ...iSt, width: 220, cursor: "pointer", fontWeight: 700 }}
               >
-                {[
-                  "January",
-                  "February",
-                  "March",
-                  "April",
-                  "May",
-                  "June",
-                  "July",
-                  "August",
-                  "September",
-                  "October",
-                  "November",
-                  "December",
-                ].map((m, i) => (
-                  <option key={m} value={i + 1}>
-                    {m}
+                {payruns.map((pr) => (
+                  <option key={pr.id} value={pr.id}>
+                    {pr.period} ({pr.status})
                   </option>
                 ))}
               </select>
-            </Fld>
-            <Fld label="Year">
-              <input
-                type="number"
-                style={iSt}
-                value={newPR.year}
-                onChange={(e) =>
-                  setNewPR({ ...newPR, year: Number(e.target.value) })
-                }
-              />
-            </Fld>
+            </div>
+
+            {activeRun && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 12, color: F.text2 }}>Current Status:</span>
+                {prBadge(activeRun.status)}
+              </div>
+            )}
           </div>
+
+          {/* Interactive 4-Stage Workflow Stepper */}
           <div
             style={{
-              marginTop: 12,
-              padding: 12,
-              background: F.infoBg,
-              borderRadius: 4,
-              fontSize: 12,
-              color: F.brand,
+              background: F.card,
+              border: `1px solid ${F.border}`,
+              borderRadius: 8,
+              padding: "16px 20px",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
             }}
           >
-            This will create a Draft pay run for all {emps.length} active
-            employees.
+            <div style={{ fontSize: 11, fontWeight: 700, color: F.text2, textTransform: "uppercase", marginBottom: 12 }}>
+              Interactive Payroll Process Workflow
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              {[
+                { title: "1. Attendance & LOP", step: 0 },
+                { title: "2. Additions & Bonuses", step: 1 },
+                { title: "3. Review Calculations", step: 2 },
+                { title: "4. Approval & Disbursement", step: 3 },
+              ].map((s, i) => {
+                const isCurrent = currentStepIndex === s.step
+                const isPassed = currentStepIndex > s.step
+
+                return (
+                  <div
+                    key={i}
+                    onClick={() => setCurrentStepIndex(s.step)}
+                    style={{
+                      flex: 1,
+                      background: isCurrent ? F.infoBg : F.pageBg,
+                      border: `1px solid ${isCurrent ? F.brand : F.border}`,
+                      borderRadius: 6,
+                      padding: "10px 14px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span style={{ fontSize: 12, fontWeight: 700, color: isCurrent ? F.brand : F.text1 }}>
+                      {s.title}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: isPassed ? F.success : isCurrent ? F.brand : F.text3,
+                        background: F.card,
+                        padding: "2px 6px",
+                        borderRadius: 4,
+                      }}
+                    >
+                      {isPassed ? "Completed" : isCurrent ? "Active" : "Pending"}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
           </div>
+
+          {/* Action Notification Strip */}
           <div
             style={{
+              background: activeRun?.status === "Completed" ? F.successBg : F.warningBg,
+              border: `1px solid ${activeRun?.status === "Completed" ? F.success : F.warning}40`,
+              borderLeft: `4px solid ${activeRun?.status === "Completed" ? F.success : F.warning}`,
+              borderRadius: 8,
+              padding: "14px 18px",
               display: "flex",
-              justifyContent: "flex-end",
-              gap: 8,
-              marginTop: 16,
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 12,
             }}
           >
-            <Btn variant="secondary" onClick={() => setShowNew(false)}>
-              Cancel
-            </Btn>
-            <Btn onClick={createPayrun}>Create Pay Run</Btn>
+            <div>
+              <strong style={{ color: F.text1, fontSize: 13 }}>
+                Pay Run: {activeRun ? activeRun.period : "August 2026"} &bull; Stage: {activeRun?.status}
+              </strong>
+              <div style={{ color: F.text2, fontSize: 12, marginTop: 2 }}>
+                {activeRun?.status === "Completed"
+                  ? "Disbursement completed. All employee payslips are finalized."
+                  : "Click 'Advance Status' to progress to the next verification or final disbursement stage."}
+              </div>
+            </div>
+            {activeRun && activeRun.status !== "Completed" && (
+              <Btn onClick={() => advanceRunStatus(activeRun)}>
+                Advance Status ({activeRun.status}) &rarr;
+              </Btn>
+            )}
+          </div>
+
+          {/* Employee Pay Run Sheet Table */}
+          {activeRun && (
+            <div
+              style={{
+                background: F.card,
+                border: `1px solid ${F.border}`,
+                borderRadius: 8,
+                overflow: "hidden",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+              }}
+            >
+              <div
+                style={{
+                  padding: "16px 20px",
+                  borderBottom: `1px solid ${F.border}`,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+                    Employee Pay Sheet &mdash; {activeRun.period}
+                  </h2>
+                  <div style={{ fontSize: 12, color: F.text2, marginTop: 2 }}>
+                    Click "Edit" on any employee to adjust LOP, bonus, tax withholdings, or custom additions
+                  </div>
+                </div>
+                {prBadge(activeRun.status)}
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr
+                      style={{
+                        borderBottom: `1px solid ${F.border}`,
+                        background: F.pageBg,
+                        color: F.text2,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      <th style={{ padding: "10px 18px", textAlign: "left" }}>Employee</th>
+                      <th style={{ padding: "10px 14px", textAlign: "left" }}>Department</th>
+                      <th style={{ padding: "10px 14px", textAlign: "right" }}>Gross Salary</th>
+                      <th style={{ padding: "10px 14px", textAlign: "right" }}>LOP Days</th>
+                      <th style={{ padding: "10px 14px", textAlign: "right" }}>LOP Ded.</th>
+                      <th style={{ padding: "10px 14px", textAlign: "right" }}>Bonus / Add.</th>
+                      <th style={{ padding: "10px 14px", textAlign: "right" }}>EPF (12%)</th>
+                      <th style={{ padding: "10px 14px", textAlign: "right" }}>TDS Tax</th>
+                      <th style={{ padding: "10px 14px", textAlign: "right" }}>Net Salary</th>
+                      <th style={{ padding: "10px 18px", textAlign: "right" }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeRun.rows.map((row) => (
+                      <tr
+                        key={row.empId}
+                        style={{
+                          borderBottom: `1px solid ${F.border}60`,
+                          transition: "background 0.12s ease",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = F.pageBg)}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <td style={{ padding: "14px 18px" }}>
+                          <strong style={{ color: F.text1 }}>{row.empName}</strong>
+                          <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
+                            ID: {row.empId}
+                          </div>
+                        </td>
+                        <td style={{ padding: "14px 14px", color: F.text2 }}>{row.department}</td>
+                        <td style={{ padding: "14px 14px", textAlign: "right", fontWeight: 600, color: F.text1 }}>
+                          {inr(row.grossSalary)}
+                        </td>
+                        <td style={{ padding: "14px 14px", textAlign: "right", color: row.lopDays > 0 ? F.error : F.text3 }}>
+                          {row.lopDays} d
+                        </td>
+                        <td style={{ padding: "14px 14px", textAlign: "right", color: row.lopDeduction > 0 ? F.error : F.text3 }}>
+                          {inr(row.lopDeduction)}
+                        </td>
+                        <td style={{ padding: "14px 14px", textAlign: "right", color: (row.bonus + row.incentive) > 0 ? F.brand : F.text3 }}>
+                          +{inr(row.bonus + row.incentive)}
+                        </td>
+                        <td style={{ padding: "14px 14px", textAlign: "right", color: F.text2 }}>
+                          {inr(row.pf)}
+                        </td>
+                        <td style={{ padding: "14px 14px", textAlign: "right", color: F.warning }}>
+                          {inr(row.tds)}
+                        </td>
+                        <td style={{ padding: "14px 14px", textAlign: "right", fontWeight: 800, color: F.success, fontSize: 14 }}>
+                          {inr(row.netSalary)}
+                        </td>
+                        <td style={{ padding: "14px 18px", textAlign: "right" }}>
+                          <Btn
+                            small
+                            variant="secondary"
+                            onClick={() =>
+                              setEditingRow({
+                                row,
+                                empName: row.empName,
+                                grossSalary: row.grossSalary,
+                                lopDays: row.lopDays,
+                                bonus: row.bonus,
+                                incentive: row.incentive,
+                                tds: row.tds,
+                              })
+                            }
+                          >
+                            Edit
+                          </Btn>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: F.pageBg, borderTop: `2px solid ${F.border}`, fontWeight: 800 }}>
+                      <td style={{ padding: "14px 18px", color: F.text1 }} colSpan={2}>
+                        Total Summary ({activeRun.rows.length} Employees)
+                      </td>
+                      <td style={{ padding: "14px 14px", textAlign: "right", color: F.brand }}>
+                        {inr(activeRun.grossPayroll)}
+                      </td>
+                      <td colSpan={3} />
+                      <td style={{ padding: "14px 14px", textAlign: "right", color: F.warning }} colSpan={2}>
+                        Total Deductions: {inr(activeRun.totalDeductions)}
+                      </td>
+                      <td style={{ padding: "14px 14px", textAlign: "right", color: F.success, fontSize: 15 }}>
+                        {inr(activeRun.netPayroll)}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: PAYROLL HISTORY WITH SAP FIORI FILTER BAR */}
+      {payrollTab === "history" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* SAP Fiori Collapsible Filter Bar Panel */}
+          <div
+            style={{
+              background: F.card,
+              border: `1px solid ${F.border}`,
+              borderRadius: 8,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
+              overflow: "hidden",
+            }}
+          >
+            {/* Filter Bar Action Bar Header */}
+            <div
+              style={{
+                padding: "12px 18px",
+                borderBottom: showHistoryFilterBar ? `1px solid ${F.border}` : "none",
+                background: F.card,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 12,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: F.text1 }}>
+                  Payroll History Filter Bar
+                </span>
+                {historyActiveFiltersCount > 0 && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: F.brand,
+                      background: F.infoBg,
+                      padding: "2px 8px",
+                      borderRadius: 12,
+                    }}
+                  >
+                    {historyActiveFiltersCount} Active Filter{historyActiveFiltersCount !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+
+              {/* Action Buttons: Go, Clear Filters, Hide/Show Filter Bar */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Btn onClick={handleHistoryGo} style={{ height: 34, padding: "0 18px", fontWeight: 700 }}>
+                  Go
+                </Btn>
+                <Btn variant="secondary" onClick={handleHistoryClear} style={{ height: 34 }}>
+                  Clear Filters
+                </Btn>
+                <Btn
+                  variant="secondary"
+                  onClick={() => setShowHistoryFilterBar(!showHistoryFilterBar)}
+                  style={{ height: 34 }}
+                >
+                  {showHistoryFilterBar ? "Hide Filter Bar" : "Show Filter Bar"}
+                </Btn>
+              </div>
+            </div>
+
+            {/* Collapsible Filter Inputs Grid */}
+            {showHistoryFilterBar && (
+              <div
+                style={{
+                  padding: "16px 18px",
+                  background: F.card,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: 14,
+                  alignItems: "flex-end",
+                }}
+              >
+                {/* 1. Search Pay Period (F4 Search) */}
+                <div style={{ gridColumn: "span 2", minWidth: 260 }}>
+                  <ValueHelp
+                    label="Search Pay Period (F4 Search)"
+                    value={periodDraft}
+                    onChange={setPeriodDraft}
+                    placeholder="Search pay period (press Go to apply)…"
+                    values={f4Periods}
+                  />
+                </div>
+
+                {/* 2. Year Filter */}
+                <div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: F.text2,
+                      marginBottom: 3,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    Year
+                  </div>
+                  <select
+                    value={yearDraft}
+                    onChange={(e) => setYearDraft(e.target.value)}
+                    style={{ ...iSt, cursor: "pointer" }}
+                  >
+                    <option value="all">All Years</option>
+                    {availableYears.map((yr) => (
+                      <option key={yr} value={yr}>
+                        Year {yr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3. Run Status Filter */}
+                <div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: F.text2,
+                      marginBottom: 3,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    Run Status
+                  </div>
+                  <select
+                    value={statusDraft}
+                    onChange={(e) => setStatusDraft(e.target.value)}
+                    style={{ ...iSt, cursor: "pointer" }}
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Under Review">Under Review</option>
+                    <option value="Draft">Draft</option>
+                    <option value="Calculated">Calculated</option>
+                  </select>
+                </div>
+
+                {/* 4. Month Filter */}
+                <div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: F.text2,
+                      marginBottom: 3,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    Month
+                  </div>
+                  <select
+                    value={monthDraft}
+                    onChange={(e) => setMonthDraft(e.target.value)}
+                    style={{ ...iSt, cursor: "pointer" }}
+                  >
+                    <option value="all">All Months</option>
+                    {[
+                      [1, "Jan"], [2, "Feb"], [3, "Mar"], [4, "Apr"],
+                      [5, "May"], [6, "Jun"], [7, "Jul"], [8, "Aug"],
+                      [9, "Sep"], [10, "Oct"], [11, "Nov"], [12, "Dec"]
+                    ].map(([mNum, mName]) => (
+                      <option key={mNum} value={String(mNum)}>
+                        {mName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 5. Minimum Amount Filter */}
+                <div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: F.text2,
+                      marginBottom: 3,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                    }}
+                  >
+                    Min Net Amount
+                  </div>
+                  <select
+                    value={minAmountDraft}
+                    onChange={(e) => setMinAmountDraft(e.target.value)}
+                    style={{ ...iSt, cursor: "pointer" }}
+                  >
+                    <option value="all">All Amounts</option>
+                    <option value="500000">&gt; ₹5,00,000</option>
+                    <option value="800000">&gt; ₹8,00,000</option>
+                    <option value="1000000">&gt; ₹10,00,000</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* History Ledger Table */}
+          <div
+            style={{
+              background: F.card,
+              border: `1px solid ${F.border}`,
+              borderRadius: 8,
+              overflow: "hidden",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+            }}
+          >
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: `1px solid ${F.border}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+                  Payroll History & Audit Records
+                </h2>
+                <div style={{ fontSize: 12, color: F.text2, marginTop: 2 }}>
+                  Showing {filteredHistory.length} of {payruns.length} recorded payroll cycles
+                </div>
+              </div>
+            </div>
+
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700, fontSize: 13 }}>
+              <thead>
+                <tr
+                  style={{
+                    borderBottom: `1px solid ${F.border}`,
+                    background: F.pageBg,
+                    color: F.text2,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  <th style={{ padding: "12px 18px", textAlign: "left" }}>Pay Period</th>
+                  <th style={{ padding: "12px 14px", textAlign: "left" }}>Payment Date</th>
+                  <th style={{ padding: "12px 14px", textAlign: "center" }}>Employees</th>
+                  <th style={{ padding: "12px 14px", textAlign: "right" }}>Gross Payroll</th>
+                  <th style={{ padding: "12px 14px", textAlign: "right" }}>Deductions</th>
+                  <th style={{ padding: "12px 14px", textAlign: "right" }}>Net Disbursed</th>
+                  <th style={{ padding: "12px 14px", textAlign: "center" }}>Status</th>
+                  <th style={{ padding: "12px 18px", textAlign: "right" }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredHistory.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: 44, textAlign: "center", color: F.text3 }}>
+                      No historical payroll records match your search criteria.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredHistory.map((pr) => (
+                    <tr
+                      key={pr.id}
+                      onClick={() => setSelectedHistoryRun(pr)}
+                      style={{
+                        borderBottom: `1px solid ${F.border}60`,
+                        cursor: "pointer",
+                        transition: "background 0.12s ease",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = F.pageBg)}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <td style={{ padding: "14px 18px" }}>
+                        <div style={{ fontWeight: 800, color: F.text1 }}>{pr.period}</div>
+                        <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
+                          Ref: {pr.id}
+                        </div>
+                      </td>
+                      <td style={{ padding: "14px 14px", color: F.text2 }}>
+                        {fmtD(pr.generatedOn)}
+                      </td>
+                      <td style={{ padding: "14px 14px", textAlign: "center", fontWeight: 600 }}>
+                        {pr.totalEmployees}
+                      </td>
+                      <td style={{ padding: "14px 14px", textAlign: "right", color: F.text2, fontWeight: 600 }}>
+                        {inr(pr.grossPayroll)}
+                      </td>
+                      <td style={{ padding: "14px 14px", textAlign: "right", color: F.warning, fontWeight: 600 }}>
+                        {inr(pr.totalDeductions)}
+                      </td>
+                      <td style={{ padding: "14px 14px", textAlign: "right", fontWeight: 800, color: F.success, fontSize: 14 }}>
+                        {inr(pr.netPayroll)}
+                      </td>
+                      <td style={{ padding: "14px 14px", textAlign: "center" }}>
+                        {prBadge(pr.status)}
+                      </td>
+                      <td style={{ padding: "14px 18px", textAlign: "right" }}>
+                        <Btn small variant="secondary" onClick={() => setSelectedHistoryRun(pr)}>
+                          Details &rarr;
+                        </Btn>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Employee Row Modal */}
+      {editingRow && (
+        <Modal title={`Edit Salary Row — ${editingRow.empName}`} onClose={() => setEditingRow(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ fontSize: 13, color: F.text2 }}>
+              Adjust salary, attendance LOP, bonuses, and tax withholdings for this payroll run.
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <Fld label="Gross Base Salary (₹)">
+                <input
+                  type="number"
+                  value={editingRow.grossSalary}
+                  onChange={(e) => setEditingRow({ ...editingRow, grossSalary: Number(e.target.value) })}
+                  style={iSt}
+                />
+              </Fld>
+
+              <Fld label="Loss of Pay (LOP Days)">
+                <input
+                  type="number"
+                  min={0}
+                  max={30}
+                  value={editingRow.lopDays}
+                  onChange={(e) => setEditingRow({ ...editingRow, lopDays: Number(e.target.value) })}
+                  style={iSt}
+                />
+              </Fld>
+
+              <Fld label="Bonus (₹)">
+                <input
+                  type="number"
+                  value={editingRow.bonus}
+                  onChange={(e) => setEditingRow({ ...editingRow, bonus: Number(e.target.value) })}
+                  style={iSt}
+                />
+              </Fld>
+
+              <Fld label="Performance Incentive (₹)">
+                <input
+                  type="number"
+                  value={editingRow.incentive}
+                  onChange={(e) => setEditingRow({ ...editingRow, incentive: Number(e.target.value) })}
+                  style={iSt}
+                />
+              </Fld>
+
+              <Fld label="Income Tax TDS (₹)">
+                <input
+                  type="number"
+                  value={editingRow.tds}
+                  onChange={(e) => setEditingRow({ ...editingRow, tds: Number(e.target.value) })}
+                  style={iSt}
+                />
+              </Fld>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 12 }}>
+              <Btn variant="secondary" onClick={() => setEditingRow(null)}>
+                Cancel
+              </Btn>
+              <Btn onClick={handleSaveRow}>Save & Recalculate</Btn>
+            </div>
           </div>
         </Modal>
       )}
 
-      {confirm && (
-        <Confirm
-          msg={confirm.msg}
-          okLabel={confirm.okLabel}
-          onOk={confirm.onOk}
-          onCancel={() => setConfirm(null)}
-        />
-      )}
-    </div>
-  )
-}
+      {/* Create New Payrun Modal */}
+      {showNewModal && (
+        <Modal title="Create New Pay Run" onClose={() => setShowNewModal(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={{ fontSize: 13, color: F.text2 }}>
+              Initialize a new monthly salary pay run cycle. Employee counts and deductions will be calculated automatically.
+            </div>
 
-function PayslipSheet({
-  row,
-  run,
-  emp,
-  onDownload,
-}: {
-  row: PayrunInputRow
-  run: Payrun
-  emp: Employee
-  onDownload?: () => void
-}) {
-  return (
-    <div>
-      <div
-        style={{
-          background: F.shell,
-          color: "#fff",
-          padding: "20px 24px",
-          borderRadius: 4,
-          marginBottom: 16,
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-        }}
-      >
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 800 }}>
-            Naxrita Solutions Pvt. Ltd.
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <Fld label="Select Month">
+                <select
+                  value={newMonth}
+                  onChange={(e) => setNewMonth(Number(e.target.value))}
+                  style={{ ...iSt, cursor: "pointer" }}
+                >
+                  {[
+                    [1, "January"], [2, "February"], [3, "March"], [4, "April"],
+                    [5, "May"], [6, "June"], [7, "July"], [8, "August"],
+                    [9, "September"], [10, "October"], [11, "November"], [12, "December"]
+                  ].map(([num, name]) => (
+                    <option key={num} value={num}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </Fld>
+
+              <Fld label="Select Year">
+                <select
+                  value={newYear}
+                  onChange={(e) => setNewYear(Number(e.target.value))}
+                  style={{ ...iSt, cursor: "pointer" }}
+                >
+                  <option value={2026}>2026</option>
+                  <option value={2027}>2027</option>
+                </select>
+              </Fld>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+              <Btn variant="secondary" onClick={() => setShowNewModal(false)}>
+                Cancel
+              </Btn>
+              <Btn onClick={handleCreatePayrun}>Generate Pay Run</Btn>
+            </div>
           </div>
-          <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>
-            Pay Slip for the month of {run.period}
-          </div>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <div style={{ fontSize: 11, opacity: 0.6 }}>Employee ID</div>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>{emp.id}</div>
-        </div>
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 12,
-          marginBottom: 16,
-        }}
-      >
-        {([
-          ["Employee Name", emp.name],
-          ["Designation", emp.designation],
-          ["Department", emp.department],
-          ["Work Location", emp.location],
-          ["Pay Period", run.period],
-          ["Payment Mode", "Bank Transfer"],
-        ] as [string, string][]).map(([l, v]) => (
-          <div
-            key={l}
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "6px 0",
-              borderBottom: `1px solid ${F.border}`,
-            }}
-          >
-            <span style={{ fontSize: 12, color: F.text2 }}>{l}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: F.text1 }}>
-              {v}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: 16,
-          marginBottom: 16,
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: F.success,
-              marginBottom: 8,
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-            }}
-          >
-            Earnings
-          </div>
-          {([
-            ["Basic", row.grossSalary * 0.5],
-            ["HRA", row.grossSalary * 0.22],
-            ["Fixed Allowance", row.grossSalary * 0.11],
-            ["Special Allowance", row.grossSalary * 0.17],
-            ...(row.bonus > 0 ? [["Bonus", row.bonus]] : []),
-            ...(row.lopDeduction > 0 ? [["Less: LOP", -row.lopDeduction]] : []),
-          ] as [string, number][]).map(([l, v]) => (
+        </Modal>
+      )}
+
+      {/* Payrun Details SlidePanel */}
+      {selectedHistoryRun && (
+        <SlidePanel
+          title={`Pay Run Ledger — ${selectedHistoryRun.period}`}
+          sub={`Generated by ${selectedHistoryRun.generatedBy} on ${fmtD(selectedHistoryRun.generatedOn)}`}
+          onClose={() => setSelectedHistoryRun(null)}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div
-              key={l}
               style={{
+                background: F.pageBg,
+                border: `1px solid ${F.border}`,
+                borderRadius: 8,
+                padding: "16px 20px",
                 display: "flex",
                 justifyContent: "space-between",
-                padding: "5px 0",
-                borderBottom: `1px solid ${F.border}`,
-                fontSize: 12,
+                alignItems: "center",
               }}
             >
-              <span style={{ color: F.text2 }}>{l}</span>
-              <span
-                style={{ fontWeight: 600, color: v < 0 ? F.error : F.text1 }}
-              >
-                {v < 0 ? `(${inr(-v)})` : inr(v)}
-              </span>
-            </div>
-          ))}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "8px 0",
-              fontSize: 13,
-              fontWeight: 700,
-              color: F.success,
-            }}
-          >
-            <span>Gross Earnings</span>
-            <span>{inr(row.totalEarnings)}</span>
-          </div>
-        </div>
-        <div>
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 700,
-              color: F.error,
-              marginBottom: 8,
-              textTransform: "uppercase",
-              letterSpacing: "0.06em",
-            }}
-          >
-            Deductions
-          </div>
-          {([
-            [" Provident Fund", row.pf],
-            ["ESI", row.esi],
-            ["TDS (Income Tax)", row.tds],
-            ["Professional Tax", row.profTax],
-            ["Other Deduction", row.otherDeduction],
-          ] as [string, number][])
-            .filter(([, v]) => v > 0)
-            .map(([l, v]) => (
-              <div
-                key={l}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "5px 0",
-                  borderBottom: `1px solid ${F.border}`,
-                  fontSize: 12,
-                }}
-              >
-                <span style={{ color: F.text2 }}>{l}</span>
-                <span style={{ fontWeight: 600, color: F.error }}>
-                  {inr(v)}
-                </span>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: F.text2, textTransform: "uppercase" }}>
+                  Net Disbursed Payroll
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: F.success, marginTop: 2 }}>
+                  {inr(selectedHistoryRun.netPayroll)}
+                </div>
               </div>
-            ))}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              padding: "8px 0",
-              fontSize: 13,
-              fontWeight: 700,
-              color: F.error,
-            }}
-          >
-            <span>Total Deductions</span>
-            <span>{inr(row.totalDeductions)}</span>
+              {prBadge(selectedHistoryRun.status)}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${F.border}60` }}>
+                <span style={{ color: F.text2 }}>Gross Payroll:</span>
+                <strong>{inr(selectedHistoryRun.grossPayroll)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${F.border}60` }}>
+                <span style={{ color: F.text2 }}>Total Deductions:</span>
+                <strong style={{ color: F.warning }}>{inr(selectedHistoryRun.totalDeductions)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${F.border}60` }}>
+                <span style={{ color: F.text2 }}>Total Employees:</span>
+                <strong>{selectedHistoryRun.totalEmployees} Employees</strong>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 14 }}>
+              <Btn variant="secondary" onClick={() => setSelectedHistoryRun(null)}>
+                Close
+              </Btn>
+              {selectedHistoryRun.status !== "Completed" && (
+                <Btn onClick={() => advanceRunStatus(selectedHistoryRun)}>
+                  Advance Status ({selectedHistoryRun.status}) &rarr;
+                </Btn>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
-      <div
-        style={{
-          background: F.successBg,
-          border: `1px solid ${F.success}30`,
-          borderRadius: 4,
-          padding: "14px 18px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <span style={{ fontSize: 15, fontWeight: 700, color: F.success }}>
-          Net Pay
-        </span>
-        <span style={{ fontSize: 22, fontWeight: 800, color: F.success }}>
-          {inr(row.netSalary)}
-        </span>
-      </div>
-      {onDownload && (
-        <div
-          style={{ marginTop: 14, display: "flex", justifyContent: "flex-end" }}
-        >
-          <Btn variant="secondary" onClick={onDownload}>
-            Download PDF
-          </Btn>
-        </div>
+        </SlidePanel>
       )}
     </div>
   )
@@ -9182,22 +9910,57 @@ interface UserRow {
   role: "Org Admin" | "Employee"
   status: "Active" | "Locked"
 }
+interface UserRow {
+  name: string
+  role: "Org Admin" | "Employee"
+  status: "Active" | "Locked"
+  department?: string
+  scope?: string
+}
+
 function AccessManagementView({ emps }: { emps: Employee[] }) {
   const toast = useToast()
+
+  // Initialize users roster with rich metadata
   const [users, setUsers] = useState<UserRow[]>([
-    { name: "Meena Iyer", role: "Org Admin", status: "Active" },
+    {
+      name: "Meena Iyer",
+      role: "Org Admin",
+      status: "Active",
+      department: "Executive & Admin",
+      scope: "Full Admin Access",
+    },
     ...emps
       .filter((e) => e.id !== "EMP-003")
       .map((e) => ({
         name: e.name,
         role: "Employee" as const,
-        status: e.id === "EMP-006" ? "Locked" as const : "Active" as const,
+        status: e.id === "EMP-006" ? ("Locked" as const) : ("Active" as const),
+        department: e.department || "Operations",
+        scope: "Self-Service Only",
       })),
   ])
+
+  // Filter Bar state: Draft inputs + Applied filters
+  const [showFilterBar, setShowFilterBar] = useState(true)
+
+  const [searchDraft, setSearchDraft] = useState("")
+  const [roleDraft, setRoleDraft] = useState("all")
+  const [statusDraft, setStatusDraft] = useState("all")
+  const [deptDraft, setDeptDraft] = useState("all")
+  const [scopeDraft, setScopeDraft] = useState("all")
+
+  const [appliedSearch, setAppliedSearch] = useState("")
+  const [appliedRole, setAppliedRole] = useState("all")
+  const [appliedStatus, setAppliedStatus] = useState("all")
+  const [appliedDept, setAppliedDept] = useState("all")
+  const [appliedScope, setAppliedScope] = useState("all")
+
   const [showAdd, setShowAdd] = useState(false)
   const [newUser, setNewUser] = useState({
     name: "",
     role: "Employee" as UserRow["role"],
+    department: "Engineering",
   })
   const [editUser, setEditUser] = useState<UserRow | null>(null)
   const [confirm, setConfirm] = useState<{
@@ -9205,20 +9968,55 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
     onOk: () => void
   } | null>(null)
 
-  const capabilities = [
-    ["Manage Organizations", "Yes", "No", "No"],
-    ["Manage Product Masters", "Yes", "No", "No"],
-    ["Assign Org Admins", "Yes", "No", "No"],
-    ["Manage Org Employees", "Restricted", "Yes", "No"],
-    ["Configure Payroll", "No", "Yes", "No"],
-    ["Generate Payroll", "No", "Yes", "No"],
-    ["Approve Payroll", "No", "Yes", "No"],
-    ["View Org Reports", "Restricted", "Yes", "No"],
-    ["Manage Access", "No", "Yes", "No"],
-    ["View Own Salary", "-", "-", "Yes"],
-    ["View Own Payslips", "-", "-", "Yes"],
-    ["View Other Emp Data", "Restricted", "Authorized", "No"],
-  ]
+  const f4UserNames = Array.from(new Set(users.map((u) => u.name)))
+  const availableDepts = Array.from(new Set(users.map((u) => u.department || "Operations")))
+
+  // Execute filter search on "Go"
+  const handleGo = () => {
+    setAppliedSearch(searchDraft)
+    setAppliedRole(roleDraft)
+    setAppliedStatus(statusDraft)
+    setAppliedDept(deptDraft)
+    setAppliedScope(scopeDraft)
+    toast("Filter parameters applied", "info")
+  }
+
+  // Clear all filters
+  const handleClear = () => {
+    setSearchDraft("")
+    setRoleDraft("all")
+    setStatusDraft("all")
+    setDeptDraft("all")
+    setScopeDraft("all")
+
+    setAppliedSearch("")
+    setAppliedRole("all")
+    setAppliedStatus("all")
+    setAppliedDept("all")
+    setAppliedScope("all")
+
+    toast("All filters cleared", "info")
+  }
+
+  // Filter evaluation logic
+  const filteredUsers = users.filter((u) => {
+    if (appliedSearch && !u.name.toLowerCase().includes(appliedSearch.toLowerCase()) && !u.role.toLowerCase().includes(appliedSearch.toLowerCase())) {
+      return false
+    }
+    if (appliedRole !== "all" && u.role !== appliedRole) {
+      return false
+    }
+    if (appliedStatus !== "all" && u.status !== appliedStatus) {
+      return false
+    }
+    if (appliedDept !== "all" && u.department !== appliedDept) {
+      return false
+    }
+    if (appliedScope !== "all" && u.scope !== appliedScope) {
+      return false
+    }
+    return true
+  })
 
   const toggleLock = (u: UserRow) => {
     const next = u.status === "Active" ? "Locked" : "Active"
@@ -9239,335 +10037,16 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
 
   const addUser = () => {
     if (!newUser.name) return toast("Name is required", "error")
-    setUsers([...users, { ...newUser, status: "Active" }])
-    setShowAdd(false)
-    setNewUser({ name: "", role: "Employee" })
-    toast(`${newUser.name} added as ${newUser.role}`, "success")
-  }
-
-  const saveEditUser = () => {
-    if (!editUser) return
-    setUsers(users.map((u) => (u.name === editUser.name ? editUser : u)))
-    setEditUser(null)
-    toast("User role updated", "success")
-  }
-
-  return (
-    <div>
-      <PH
-        title="Access Management"
-        sub="Role-based permissions for platform users"
-        action={<Btn onClick={() => setShowAdd(true)}>+ Add User</Btn>}
-      />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 4,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "12px 18px",
-              borderBottom: `1px solid ${F.border}`,
-              fontSize: 14,
-              fontWeight: 600,
-              color: F.text1,
-            }}
-          >
-            Capability Matrix
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <Th>Capability</Th>
-                <Th>Product Admin</Th>
-                <Th>Org Admin</Th>
-                <Th>Employee</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {capabilities.map(([cap, ...rest]) => (
-                <TrH key={cap}>
-                  <Td>
-                    <span style={{ fontSize: 12 }}>{cap}</span>
-                  </Td>
-                  {rest.map((v, i) => (
-                    <Td key={i}>{capBadge(v)}</Td>
-                  ))}
-                </TrH>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 4,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              padding: "12px 18px",
-              borderBottom: `1px solid ${F.border}`,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <span style={{ fontSize: 14, fontWeight: 600, color: F.text1 }}>
-              Users - Naxrita Solutions
-            </span>
-            <Btn
-              small
-              variant="secondary"
-              onClick={() => toast("User access log exported", "success")}
-            >
-              Export
-            </Btn>
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <Th>User</Th>
-                <Th>Role</Th>
-                <Th>Status</Th>
-                <Th>Actions</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <TrH key={u.name}>
-                  <Td>
-                    <span style={{ fontWeight: 600 }}>{u.name}</span>
-                  </Td>
-                  <Td>
-                    <Badge
-                      label={u.role}
-                      color={u.role === "Org Admin" ? F.brand : F.text2}
-                      bg={u.role === "Org Admin" ? F.infoBg : F.pageBg}
-                    />
-                  </Td>
-                  <Td>
-                    <Badge
-                      label={u.status}
-                      color={u.status === "Active" ? F.success : F.error}
-                      bg={u.status === "Active" ? F.successBg : F.errorBg}
-                    />
-                  </Td>
-                  <Td>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <Btn
-                        small
-                        variant="secondary"
-                        onClick={() => setEditUser({ ...u })}
-                      >
-                        Edit
-                      </Btn>
-                      <Btn
-                        small
-                        variant={u.status === "Active" ? "danger" : "success"}
-                        onClick={() => toggleLock(u)}
-                      >
-                        {u.status === "Active" ? "Lock" : "Unlock"}
-                      </Btn>
-                      <Btn
-                        small
-                        variant="ghost"
-                        onClick={() =>
-                          toast(
-                            `Password reset email sent to ${u.name}`,
-                            "success",
-                          )
-                        }
-                      >
-                        Reset Pwd
-                      </Btn>
-                    </div>
-                  </Td>
-                </TrH>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {showAdd && (
-        <Modal title="Add User Access" onClose={() => setShowAdd(false)}>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
-          >
-            <Fld label="Employee Name *">
-              <select
-                style={iSt}
-                value={newUser.name}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, name: e.target.value })
-                }
-              >
-                <option value="">Select employee</option>
-                {emps
-                  .filter((e) => !users.find((u) => u.name === e.name))
-                  .map((e) => (
-                    <option key={e.id}>{e.name}</option>
-                  ))}
-              </select>
-            </Fld>
-            <Fld label="Role">
-              <select
-                style={iSt}
-                value={newUser.role}
-                onChange={(e) =>
-                  setNewUser({
-                    ...newUser,
-                    role: e.target.value as UserRow["role"],
-                  })
-                }
-              >
-                <option>Employee</option>
-                <option>Org Admin</option>
-              </select>
-            </Fld>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 8,
-              marginTop: 16,
-            }}
-          >
-            <Btn variant="secondary" onClick={() => setShowAdd(false)}>
-              Cancel
-            </Btn>
-            <Btn onClick={addUser}>Grant Access</Btn>
-          </div>
-        </Modal>
-      )}
-      {editUser && (
-        <Modal
-          title={`Edit User - ${editUser.name}`}
-          onClose={() => setEditUser(null)}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <Fld label="Role">
-              <select
-                style={iSt}
-                value={editUser.role}
-                onChange={(e) =>
-                  setEditUser({
-                    ...editUser,
-                    role: e.target.value as UserRow["role"],
-                  })
-                }
-              >
-                <option>Employee</option>
-                <option>Org Admin</option>
-              </select>
-            </Fld>
-            <Fld label="Status">
-              <select
-                style={iSt}
-                value={editUser.status}
-                onChange={(e) =>
-                  setEditUser({
-                    ...editUser,
-                    status: e.target.value as UserRow["status"],
-                  })
-                }
-              >
-                <option>Active</option>
-                <option>Locked</option>
-              </select>
-            </Fld>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 8,
-              marginTop: 16,
-            }}
-          >
-            <Btn variant="secondary" onClick={() => setEditUser(null)}>
-              Cancel
-            </Btn>
-            <Btn onClick={saveEditUser}>Save</Btn>
-          </div>
-        </Modal>
-      )}
-      {confirm && (
-        <Confirm
-          msg={confirm.msg}
-          onOk={confirm.onOk}
-          onCancel={() => setConfirm(null)}
-        />
-      )}
-    </div>
-  )
-}
-
-interface PlatformUserRow {
-  name: string
-  role: "Product Admin" | "Org Admin"
-  status: "Active" | "Locked"
-}
-function PlatformAccessManagementView({ orgs }: { orgs: Organization[] }) {
-  const toast = useToast()
-  const [users, setUsers] = useState<PlatformUserRow[]>([
-    { name: "Platform Admin", role: "Product Admin", status: "Active" },
-    { name: "Rohan Gupta", role: "Product Admin", status: "Active" },
-    { name: "Meena Iyer", role: "Org Admin", status: "Active" },
-    { name: "Security Service", role: "Product Admin", status: "Locked" },
-  ])
-  const [showAdd, setShowAdd] = useState(false)
-  const [newUser, setNewUser] = useState({
-    name: "",
-    role: "Org Admin" as PlatformUserRow["role"],
-  })
-  const [editUser, setEditUser] = useState<PlatformUserRow | null>(null)
-  const [confirm, setConfirm] = useState<{
-    msg: string
-    onOk: () => void
-  } | null>(null)
-
-  const capabilities = [
-    ["Manage Organizations", "Authorized", "View Only"],
-    ["Assign Org Admins", "Authorized", "No"],
-    ["Platform Audit Log", "Authorized", "View Only"],
-    ["Manage Org Employees", "No", "Authorized"],
-    ["Run & Approve Payroll", "No", "Authorized"],
-    ["View Employee Salary", "No", "Authorized"],
-  ]
-
-  const toggleLock = (u: PlatformUserRow) => {
-    const next = u.status === "Active" ? "Locked" : "Active"
-    setConfirm({
-      msg: `${
-        next === "Locked" ? "Lock" : "Unlock"
-      } platform access for ${u.name}?`,
-      onOk: () => {
-        setUsers(
-          users.map((x) => (x.name === u.name ? { ...x, status: next } : x)),
-        )
-        toast(
-          `${u.name} ${next === "Locked" ? "locked" : "unlocked"}`,
-          "success",
-        )
-        setConfirm(null)
+    setUsers([
+      ...users,
+      {
+        ...newUser,
+        status: "Active",
+        scope: newUser.role === "Org Admin" ? "Full Admin Access" : "Self-Service Only",
       },
-    })
-  }
-
-  const addUser = () => {
-    if (!newUser.name) return toast("Name is required", "error")
-    setUsers([...users, { ...newUser, status: "Active" }])
+    ])
     setShowAdd(false)
-    setNewUser({ name: "", role: "Org Admin" })
+    setNewUser({ name: "", role: "Employee", department: "Engineering" })
     toast(`${newUser.name} added as ${newUser.role}`, "success")
   }
 
@@ -9575,243 +10054,508 @@ function PlatformAccessManagementView({ orgs }: { orgs: Organization[] }) {
     if (!editUser) return
     setUsers(users.map((u) => (u.name === editUser.name ? editUser : u)))
     setEditUser(null)
-    toast("Platform user role updated", "success")
+    toast("User role updated successfully", "success")
   }
 
+  const orgAdminsCount = users.filter((u) => u.role === "Org Admin").length
+  const employeesCount = users.filter((u) => u.role === "Employee").length
+  const lockedCount = users.filter((u) => u.status === "Locked").length
+  const activeFiltersCount =
+    (appliedSearch ? 1 : 0) +
+    (appliedRole !== "all" ? 1 : 0) +
+    (appliedStatus !== "all" ? 1 : 0) +
+    (appliedDept !== "all" ? 1 : 0) +
+    (appliedScope !== "all" ? 1 : 0)
+
   return (
-    <div>
-      <PH
-        title="Platform Access Management"
-        sub="Role-based permissions for system-level users"
-        action={<Btn onClick={() => setShowAdd(true)}>+ Add Platform User</Btn>}
-      />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 4,
-            overflow: "hidden",
-          }}
-        >
-          <div
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* Page Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1
             style={{
-              padding: "12px 18px",
-              borderBottom: `1px solid ${F.border}`,
-              fontSize: 14,
-              fontWeight: 600,
+              margin: 0,
+              fontSize: 22,
+              fontWeight: 800,
               color: F.text1,
+              letterSpacing: "-0.01em",
             }}
           >
-            Platform Capability Matrix
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <Th>Capability</Th>
-                <Th>Product Admin</Th>
-                <Th>Org Admin</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {capabilities.map(([cap, pa, oa]) => (
-                <TrH key={cap}>
-                  <Td>
-                    <span style={{ fontSize: 12 }}>{cap}</span>
-                  </Td>
-                  <Td>{capBadge(pa)}</Td>
-                  <Td>{capBadge(oa)}</Td>
-                </TrH>
-              ))}
-            </tbody>
-          </table>
+            Access Management & Roles
+          </h1>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
+            Configure user accounts, role assignments, and security permissions
+          </p>
         </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Btn onClick={() => setShowAdd(true)}>+ Add User</Btn>
+          <Btn variant="secondary" onClick={() => toast("User roster exported", "info")}>
+            Export Roster
+          </Btn>
+        </div>
+      </div>
+
+      {/* 4 KPI Summary Cards */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 16,
+        }}
+      >
+        <EmployeeMetricCard
+          label="Total Users"
+          value={`${users.length} Users`}
+          sub="Registered organization platform logins"
+          accent={F.brand}
+          badgeText="Active Roster"
+          badgeBg={F.infoBg}
+          badgeColor={F.brand}
+          progress={100}
+        />
+        <EmployeeMetricCard
+          label="Organization Admins"
+          value={`${orgAdminsCount} Admin`}
+          sub="Full administrative & payroll execution rights"
+          accent="#8B5CF6"
+          badgeText="Admin"
+          badgeBg="#F5F3FF"
+          badgeColor="#7C3AED"
+          progress={100}
+        />
+        <EmployeeMetricCard
+          label="Employee Self-Service"
+          value={`${employeesCount} Employees`}
+          sub="Restricted to own salary, payslips & tax data"
+          accent={F.success}
+          badgeText="Standard Access"
+          badgeBg={F.successBg}
+          badgeColor={F.success}
+          progress={100}
+        />
+        <EmployeeMetricCard
+          label="Account Security"
+          value={`${lockedCount} Locked`}
+          sub={lockedCount > 0 ? "Accounts restricted from sign-in" : "All user accounts active"}
+          accent={lockedCount > 0 ? F.warning : F.text3}
+          badgeText={lockedCount > 0 ? "Security Alert" : "Protected"}
+          badgeBg={lockedCount > 0 ? F.warningBg : F.pageBg}
+          badgeColor={lockedCount > 0 ? F.warning : F.text2}
+          progress={100}
+        />
+      </div>
+
+      {/* SAP Fiori Filter Bar Panel */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
+          overflow: "hidden",
+        }}
+      >
+        {/* Filter Bar Action Bar Header */}
         <div
           style={{
+            padding: "12px 18px",
+            borderBottom: showFilterBar ? `1px solid ${F.border}` : "none",
             background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 4,
-            overflow: "hidden",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 12,
           }}
         >
-          <div
-            style={{
-              padding: "12px 18px",
-              borderBottom: `1px solid ${F.border}`,
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <span style={{ fontSize: 14, fontWeight: 600, color: F.text1 }}>
-              Platform Administrators
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: F.text1 }}>
+              Filter Bar
             </span>
+            {activeFiltersCount > 0 && (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: F.brand,
+                  background: F.infoBg,
+                  padding: "2px 8px",
+                  borderRadius: 12,
+                }}
+              >
+                {activeFiltersCount} Active Filter{activeFiltersCount !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+
+          {/* Action Row: Go, Clear Filters, Hide/Show Filter Bar */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Btn onClick={handleGo} style={{ height: 34, padding: "0 18px", fontWeight: 700 }}>
+              Go
+            </Btn>
+            <Btn variant="secondary" onClick={handleClear} style={{ height: 34 }}>
+              Clear Filters
+            </Btn>
             <Btn
-              small
               variant="secondary"
-              onClick={() => toast("Platform access log exported", "success")}
+              onClick={() => setShowFilterBar(!showFilterBar)}
+              style={{ height: 34 }}
             >
-              Export
+              {showFilterBar ? "Hide Filter Bar" : "Show Filter Bar"}
             </Btn>
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        </div>
+
+        {/* Collapsible Filter Inputs Panel */}
+        {showFilterBar && (
+          <div
+            style={{
+              padding: "16px 18px",
+              background: F.card,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 14,
+              alignItems: "flex-end",
+            }}
+          >
+            {/* 1. Search User (F4 Search) */}
+            <div style={{ gridColumn: "span 2", minWidth: 260 }}>
+              <ValueHelp
+                label="Search User (F4 Search)"
+                value={searchDraft}
+                onChange={setSearchDraft}
+                placeholder="Search user name or role (press Go to apply)…"
+                values={f4UserNames}
+              />
+            </div>
+
+            {/* 2. Role Filter */}
+            <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: F.text2,
+                  marginBottom: 3,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Role Filter
+              </div>
+              <select
+                value={roleDraft}
+                onChange={(e) => setRoleDraft(e.target.value)}
+                style={{ ...iSt, cursor: "pointer" }}
+              >
+                <option value="all">All Roles</option>
+                <option value="Org Admin">Org Admin</option>
+                <option value="Employee">Employee</option>
+              </select>
+            </div>
+
+            {/* 3. Account Status Filter */}
+            <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: F.text2,
+                  marginBottom: 3,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Account Status
+              </div>
+              <select
+                value={statusDraft}
+                onChange={(e) => setStatusDraft(e.target.value)}
+                style={{ ...iSt, cursor: "pointer" }}
+              >
+                <option value="all">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Locked">Locked</option>
+              </select>
+            </div>
+
+            {/* 4. Department Filter */}
+            <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: F.text2,
+                  marginBottom: 3,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Department
+              </div>
+              <select
+                value={deptDraft}
+                onChange={(e) => setDeptDraft(e.target.value)}
+                style={{ ...iSt, cursor: "pointer" }}
+              >
+                <option value="all">All Departments</option>
+                {availableDepts.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 5. Permission Scope Filter */}
+            <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: F.text2,
+                  marginBottom: 3,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                Access Scope
+              </div>
+              <select
+                value={scopeDraft}
+                onChange={(e) => setScopeDraft(e.target.value)}
+                style={{ ...iSt, cursor: "pointer" }}
+              >
+                <option value="all">All Scopes</option>
+                <option value="Full Admin Access">Full Admin Access</option>
+                <option value="Self-Service Only">Self-Service Only</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* User Roster Table */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          overflow: "hidden",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+        }}
+      >
+        <div
+          style={{
+            padding: "16px 20px",
+            borderBottom: `1px solid ${F.border}`,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+              Platform User Roster
+            </h2>
+            <div style={{ fontSize: 12, color: F.text2, marginTop: 2 }}>
+              Showing {filteredUsers.length} of {users.length} registered user accounts
+            </div>
+          </div>
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700, fontSize: 13 }}>
             <thead>
-              <tr>
-                <Th>User</Th>
-                <Th>Role</Th>
-                <Th>Status</Th>
-                <Th>Actions</Th>
+              <tr
+                style={{
+                  borderBottom: `1px solid ${F.border}`,
+                  background: F.pageBg,
+                  color: F.text2,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                }}
+              >
+                <th style={{ padding: "12px 18px", textAlign: "left" }}>Platform User</th>
+                <th style={{ padding: "12px 14px", textAlign: "left" }}>Assigned Role</th>
+                <th style={{ padding: "12px 14px", textAlign: "left" }}>Department</th>
+                <th style={{ padding: "12px 14px", textAlign: "left" }}>Permission Scope</th>
+                <th style={{ padding: "12px 14px", textAlign: "center" }}>Account Status</th>
+                <th style={{ padding: "12px 18px", textAlign: "right" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
-                <TrH key={u.name}>
-                  <Td>
-                    <span style={{ fontWeight: 600 }}>{u.name}</span>
-                  </Td>
-                  <Td>
-                    <Badge
-                      label={u.role}
-                      color={u.role === "Product Admin" ? F.brand : F.text2}
-                      bg={u.role === "Product Admin" ? F.infoBg : F.pageBg}
-                    />
-                  </Td>
-                  <Td>
-                    <Badge
-                      label={u.status}
-                      color={u.status === "Active" ? F.success : F.error}
-                      bg={u.status === "Active" ? F.successBg : F.errorBg}
-                    />
-                  </Td>
-                  <Td>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <Btn
-                        small
-                        variant="secondary"
-                        onClick={() => setEditUser({ ...u })}
-                      >
-                        Edit
-                      </Btn>
-                      <Btn
-                        small
-                        variant={u.status === "Active" ? "danger" : "success"}
-                        onClick={() => toggleLock(u)}
-                      >
-                        {u.status === "Active" ? "Lock" : "Unlock"}
-                      </Btn>
-                    </div>
-                  </Td>
-                </TrH>
-              ))}
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: 44, textAlign: "center", color: F.text3 }}>
+                    No platform users match your filter criteria. Click "Clear Filters" or adjust search.
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((u) => (
+                  <tr
+                    key={u.name}
+                    style={{
+                      borderBottom: `1px solid ${F.border}60`,
+                      transition: "background 0.12s ease",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = F.pageBg)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <td style={{ padding: "14px 18px" }}>
+                      <strong style={{ color: F.text1 }}>{u.name}</strong>
+                    </td>
+                    <td style={{ padding: "14px 14px" }}>
+                      <Badge
+                        label={u.role}
+                        color={u.role === "Org Admin" ? F.brand : F.text2}
+                        bg={u.role === "Org Admin" ? F.infoBg : F.pageBg}
+                      />
+                    </td>
+                    <td style={{ padding: "14px 14px", color: F.text2 }}>
+                      {u.department || "Operations"}
+                    </td>
+                    <td style={{ padding: "14px 14px", color: F.text3, fontSize: 12 }}>
+                      {u.scope || "Self-Service Only"}
+                    </td>
+                    <td style={{ padding: "14px 14px", textAlign: "center" }}>
+                      <Badge
+                        label={u.status}
+                        color={u.status === "Active" ? F.success : F.error}
+                        bg={u.status === "Active" ? F.successBg : F.errorBg}
+                        dot={u.status === "Active" ? F.success : F.error}
+                      />
+                    </td>
+                    <td style={{ padding: "14px 18px", textAlign: "right" }}>
+                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                        <Btn small variant="secondary" onClick={() => setEditUser({ ...u })}>
+                          Edit Role
+                        </Btn>
+                        <Btn
+                          small
+                          variant="secondary"
+                          onClick={() => toggleLock(u)}
+                          style={{
+                            color: u.status === "Active" ? F.error : F.success,
+                          }}
+                        >
+                          {u.status === "Active" ? "Lock" : "Unlock"}
+                        </Btn>
+                        <Btn
+                          small
+                          variant="secondary"
+                          onClick={() => toast(`Password reset email sent to ${u.name}`, "info")}
+                        >
+                          Reset Pwd
+                        </Btn>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* Add User Modal */}
       {showAdd && (
-        <Modal title="Add Platform User" onClose={() => setShowAdd(false)}>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
-          >
-            <Fld label="User Name *">
+        <Modal title="Add New Platform User" onClose={() => setShowAdd(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Fld label="User Full Name">
               <input
-                style={iSt}
                 value={newUser.name}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, name: e.target.value })
-                }
-                placeholder="Full name"
+                onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                placeholder="Enter name (e.g. Ananya Roy)"
+                style={iSt}
               />
             </Fld>
-            <Fld label="System Role">
+            <Fld label="Department">
               <select
-                style={iSt}
-                value={newUser.role}
-                onChange={(e) =>
-                  setNewUser({
-                    ...newUser,
-                    role: e.target.value as PlatformUserRow["role"],
-                  })
-                }
+                value={newUser.department}
+                onChange={(e) => setNewUser({ ...newUser, department: e.target.value })}
+                style={{ ...iSt, cursor: "pointer" }}
               >
-                <option>Org Admin</option>
-                <option>Product Admin</option>
+                <option value="Engineering">Engineering</option>
+                <option value="HR & Payroll">HR & Payroll</option>
+                <option value="Operations">Operations</option>
+                <option value="Finance">Finance</option>
+                <option value="Executive & Admin">Executive & Admin</option>
               </select>
             </Fld>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 8,
-              marginTop: 16,
-            }}
-          >
-            <Btn variant="secondary" onClick={() => setShowAdd(false)}>
-              Cancel
-            </Btn>
-            <Btn onClick={addUser}>Grant Access</Btn>
+            <Fld label="Assign Role">
+              <select
+                value={newUser.role}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, role: e.target.value as UserRow["role"] })
+                }
+                style={{ ...iSt, cursor: "pointer" }}
+              >
+                <option value="Employee">Employee (Self-Service)</option>
+                <option value="Org Admin">Organization Admin</option>
+              </select>
+            </Fld>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+              <Btn variant="secondary" onClick={() => setShowAdd(false)}>
+                Cancel
+              </Btn>
+              <Btn onClick={addUser}>Add User</Btn>
+            </div>
           </div>
         </Modal>
       )}
+
+      {/* Edit Role Modal */}
       {editUser && (
-        <Modal
-          title={`Edit Platform User - ${editUser.name}`}
-          onClose={() => setEditUser(null)}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <Fld label="System Role">
+        <Modal title={`Edit Role — ${editUser.name}`} onClose={() => setEditUser(null)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Fld label="User Role">
               <select
-                style={iSt}
                 value={editUser.role}
                 onChange={(e) =>
                   setEditUser({
                     ...editUser,
-                    role: e.target.value as PlatformUserRow["role"],
+                    role: e.target.value as UserRow["role"],
+                    scope: e.target.value === "Org Admin" ? "Full Admin Access" : "Self-Service Only",
                   })
                 }
+                style={{ ...iSt, cursor: "pointer" }}
               >
-                <option>Org Admin</option>
-                <option>Product Admin</option>
+                <option value="Employee">Employee (Self-Service)</option>
+                <option value="Org Admin">Organization Admin</option>
               </select>
             </Fld>
-            <Fld label="Status">
-              <select
-                style={iSt}
-                value={editUser.status}
-                onChange={(e) =>
-                  setEditUser({
-                    ...editUser,
-                    status: e.target.value as PlatformUserRow["status"],
-                  })
-                }
-              >
-                <option>Active</option>
-                <option>Locked</option>
-              </select>
-            </Fld>
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: 8,
-              marginTop: 16,
-            }}
-          >
-            <Btn variant="secondary" onClick={() => setEditUser(null)}>
-              Cancel
-            </Btn>
-            <Btn onClick={saveEditUser}>Save</Btn>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+              <Btn variant="secondary" onClick={() => setEditUser(null)}>
+                Cancel
+              </Btn>
+              <Btn onClick={saveEditUser}>Save Role Changes</Btn>
+            </div>
           </div>
         </Modal>
       )}
+
+      {/* Confirm Action Dialog */}
       {confirm && (
-        <Confirm
-          msg={confirm.msg}
-          onOk={confirm.onOk}
-          onCancel={() => setConfirm(null)}
-        />
+        <Modal title="Confirm Security Action" onClose={() => setConfirm(null)}>
+          <p style={{ color: F.text2, fontSize: 13 }}>{confirm.msg}</p>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+            <Btn variant="secondary" onClick={() => setConfirm(null)}>
+              Cancel
+            </Btn>
+            <Btn onClick={confirm.onOk}>Confirm Action</Btn>
+          </div>
+        </Modal>
       )}
     </div>
   )
@@ -9966,6 +10710,13 @@ function PlatformDashboard({
   onNav: (v: string) => void
 }) {
   const toast = useToast()
+  const { text: greeting, icon: greetingIcon } = getTimeGreeting()
+  const todayStr = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
   const totalEmployees = orgs.reduce((sum, o) => sum + o.employees, 0)
   const active = orgs.filter((o) => o.status === "Active").length
   const statusSegments = [
@@ -9991,19 +10742,65 @@ function PlatformDashboard({
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div
         style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          padding: "18px 24px",
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "flex-start",
+          alignItems: "center",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
         }}
       >
         <div>
-          <h1
-            style={{ margin: 0, fontSize: 20, fontWeight: 800, color: F.text1 }}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 18 }}>{greetingIcon}</span>
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 22,
+                fontWeight: 800,
+                color: F.text1,
+                letterSpacing: "-0.3px",
+              }}
+            >
+              {greeting}, Platform Admin
+            </h1>
+          </div>
+          <p style={{ margin: 0, fontSize: 13, color: F.text2 }}>
+            Naxpayroll Platform Health &bull; System Analytics
+          </p>
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: F.brand,
+            background: F.infoBg,
+            padding: "5px 12px",
+            borderRadius: 16,
+            border: `1px solid ${F.brand}20`,
+          }}
+        >
+          {todayStr}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <h2
+            style={{ margin: 0, fontSize: 18, fontWeight: 800, color: F.text1 }}
           >
-            Platform Analytics
-          </h1>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
-            Naxpayroll platform health · September 2026
+            Platform Overview
+          </h2>
+          <p style={{ margin: "2px 0 0", fontSize: 12, color: F.text2 }}>
+            Organization metrics and subscription status
           </p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -11033,6 +11830,9 @@ function MyProfileView({ emp }: { emp: Employee }) {
   const toast = useToast()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(emp)
+  const phoneValid = /^\+?[1-9]\d{7,14}$/.test(
+    (draft.mobile ?? "").replace(/[\s-]/g, ""),
+  )
   return (
     <div style={{ maxWidth: 680 }}>
       <PH
@@ -11052,6 +11852,13 @@ function MyProfileView({ emp }: { emp: Employee }) {
               </Btn>
               <Btn
                 onClick={() => {
+                  if (!phoneValid) {
+                    toast(
+                      "Enter a valid mobile number with country code",
+                      "error",
+                    )
+                    return
+                  }
                   setEditing(false)
                   toast("Profile updated", "success")
                 }}
@@ -11145,6 +11952,27 @@ function MyProfileView({ emp }: { emp: Employee }) {
               readOnly={!editing}
               onChange={(e) => setDraft({ ...draft, email: e.target.value })}
             />
+          </Fld>
+          <Fld label="Mobile Number *">
+            <input
+              aria-required="true"
+              inputMode="tel"
+              style={{
+                ...iSt,
+                borderColor: editing && !phoneValid ? F.error : F.border,
+              }}
+              value={
+                editing ? (draft.mobile ?? "") : (emp.mobile ?? "Not provided")
+              }
+              readOnly={!editing}
+              onChange={(e) => setDraft({ ...draft, mobile: e.target.value })}
+              placeholder="+91 98765 43210"
+            />
+            {editing && !phoneValid && (
+              <span style={{ fontSize: 11, color: F.error }}>
+                Enter a valid number, including country code.
+              </span>
+            )}
           </Fld>
           <Fld label="Department">
             <input style={iSt} value={emp.department} readOnly />
@@ -11739,18 +12567,20 @@ function NotificationBell({
 
 function ProfileMenu({
   persona,
-  switchPersona,
+  onProfile,
   personaUser,
   personaRole,
   personaInit,
   showToast,
+  onSignOut,
 }: {
   persona: Persona
-  switchPersona: (p: Persona) => void
+  onProfile: () => void
   personaUser: Record<Persona, string>
   personaRole: Record<Persona, string>
   personaInit: Record<Persona, string>
   showToast: (msg: string, type?: ToastType) => void
+  onSignOut?: () => void
 }) {
   const [open, setOpen] = useState(false)
   return (
@@ -11880,107 +12710,86 @@ function ProfileMenu({
                 </div>
               </div>
             </div>
-            <div style={{ padding: "8px 0" }}>
-              <div
-                style={{
-                  padding: "6px 16px",
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: F.text3,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                }}
-              >
-                Switch Role
-              </div>
-              {(["product_admin", "org_admin", "employee"] as Persona[]).map(
-                (p) => (
-                  <button
-                    key={p}
-                    onClick={() => {
-                      switchPersona(p)
-                      setOpen(false)
-                    }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      width: "100%",
-                      padding: "9px 16px",
-                      background: persona === p ? F.highlight : "transparent",
-                      border: "none",
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      textAlign: "left",
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.background = F.highlight)
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.background =
-                        persona === p ? F.highlight : "transparent")
-                    }
-                  >
-                    <div
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: "50%",
-                        background: persona === p ? F.brand : F.border,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 9,
-                        fontWeight: 800,
-                        color: persona === p ? "#fff" : F.text2,
-                        flexShrink: 0,
+            <div style={{ padding: "6px 0" }}>
+              {persona === "employee" ? (
+                ["View Profile", "Edit Profile", "Reset Password"].map(
+                  (label) => (
+                    <button
+                      key={label}
+                      onClick={() => {
+                        setOpen(false)
+                        label === "Reset Password"
+                          ? showToast(
+                              "Password reset email sent to your registered email",
+                              "success",
+                            )
+                          : onProfile()
                       }}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        padding: "9px 16px",
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        textAlign: "left",
+                        color: F.text1,
+                        fontSize: 13,
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background = F.highlight)
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background = "transparent")
+                      }
                     >
-                      {p === "product_admin"
-                        ? "PA"
-                        : p === "org_admin"
-                          ? "OA"
-                          : "EM"}
-                    </div>
-                    <div>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: persona === p ? 600 : 400,
-                          color: persona === p ? F.brand : F.text1,
-                        }}
-                      >
-                        {p === "product_admin"
-                          ? "Product Admin"
-                          : p === "org_admin"
-                            ? "Org Admin"
-                            : "Employee"}
-                      </div>
-                      <div style={{ fontSize: 10, color: F.text3 }}>
-                        {p === "product_admin"
-                          ? "Platform-level access"
-                          : p === "org_admin"
-                            ? "Organization management"
-                            : "Self-service portal"}
-                      </div>
-                    </div>
-                    {persona === p && (
-                      <svg
-                        style={{ marginLeft: "auto", flexShrink: 0 }}
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke={F.brand}
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </button>
-                ),
+                      {label}
+                    </button>
+                  ),
+                )
+              ) : (
+                <button
+                  onClick={() => {
+                    setOpen(false)
+                    onProfile()
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    width: "100%",
+                    padding: "9px 16px",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    textAlign: "left",
+                    color: F.text1,
+                    fontSize: 13,
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = F.highlight)
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
+                >
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={F.text2}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  <span>My Profile</span>
+                </button>
               )}
             </div>
             <div
@@ -11990,6 +12799,7 @@ function ProfileMenu({
                 onClick={() => {
                   showToast("Logged out successfully", "info")
                   setOpen(false)
+                  onSignOut?.()
                 }}
                 style={{
                   display: "flex",
@@ -12093,6 +12903,15 @@ function NavIcon({ id }: { id: string }) {
         <line x1="6" y1="20" x2="6" y2="14" />
       </svg>
     )
+  if (id === "analytics")
+    return (
+      <svg style={s} viewBox="0 0 24 24" {...p}>
+        <path d="M3 3v18h18" />
+        <rect x="7" y="12" width="3" height="5" />
+        <rect x="12" y="8" width="3" height="9" />
+        <rect x="17" y="5" width="3" height="12" />
+      </svg>
+    )
   if (id === "access")
     return (
       <svg style={s} viewBox="0 0 24 24" {...p}>
@@ -12145,14 +12964,4605 @@ const PROD_NAV = [
 ]
 const EMP_NAV = [
   { id: "dashboard", label: "Dashboard" },
-  { id: "profile", label: "My Profile" },
   { id: "salary", label: "My Salary" },
-  { id: "payruns", label: "My Payroll" },
+  { id: "payruns", label: "Payroll History" },
   { id: "payslips", label: "My Payslips" },
+  { id: "documents", label: "Documents" },
+  { id: "financial", label: "Financial Data" },
 ]
 const MY_EMP_ID = "EMP-001"
 
+// Employee data access boundary. Every employee view derives its data from this
+// identity; a route/query parameter can never select a different employee.
+function ownPayruns(payruns: Payrun[], employeeId: string) {
+  return payruns.filter((run) =>
+    run.rows.some((row) => row.empId === employeeId),
+  )
+}
+
+function employeeRows(emp: Employee, payruns: Payrun[]) {
+  return ownPayruns(payruns, emp.id)
+    .map((run) => ({
+      run,
+      row: run.rows.find((item) => item.empId === emp.id),
+    }))
+    .filter((item): item is { run: Payrun row: PayrunInputRow } =>
+      Boolean(item.row),
+    )
+    .sort((a, b) =>
+      a.run.year !== b.run.year
+        ? a.run.year - b.run.year
+        : a.run.month - b.run.month,
+    )
+}
+
+function EmployeeMetricCard({
+  label,
+  value,
+  sub,
+  accent,
+  badgeText,
+  badgeBg,
+  badgeColor,
+  icon,
+  progress,
+}: {
+  label: string
+  value: string
+  sub: string
+  accent: string
+  badgeText?: string
+  badgeBg?: string
+  badgeColor?: string
+  icon?: string
+  progress?: number
+}) {
+  return (
+    <div
+      style={{
+        background: F.card,
+        border: `1px solid ${F.border}`,
+        borderRadius: 8,
+        padding: "18px 20px",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        position: "relative",
+        overflow: "hidden",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        transition: "box-shadow 0.2s ease, transform 0.2s ease",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 3,
+          background: accent,
+        }}
+      />
+      <div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 10,
+          }}
+        >
+          <span
+            style={{
+              color: F.text2,
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+            }}
+          >
+            {label}
+          </span>
+          {badgeText && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "2px 8px",
+                borderRadius: 12,
+                background: badgeBg || F.pageBg,
+                color: badgeColor || F.text2,
+                border: `1px solid ${accent}25`,
+              }}
+            >
+              {badgeText}
+            </span>
+          )}
+        </div>
+        <div
+          style={{
+            color: F.text1,
+            fontSize: 24,
+            fontWeight: 800,
+            letterSpacing: "-0.02em",
+            lineHeight: 1.2,
+          }}
+        >
+          {value}
+        </div>
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <div style={{ color: F.text2, fontSize: 12, lineHeight: 1.4 }}>{sub}</div>
+        {typeof progress === "number" && (
+          <div
+            style={{
+              marginTop: 10,
+              height: 4,
+              borderRadius: 2,
+              background: F.pageBg,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.min(100, Math.max(0, progress))}%`,
+                height: "100%",
+                background: accent,
+                borderRadius: 2,
+                transition: "width 0.6s ease",
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function useDelayedLoad(ms = 350) {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), ms)
+    return () => clearTimeout(t)
+  }, [ms])
+  return ready
+}
+
+function SkeletonCard({ height = 104 }: { height?: number }) {
+  return (
+    <div
+      style={{
+        height,
+        background: F.card,
+        border: `1px solid ${F.border}`,
+        borderRadius: 8,
+        overflow: "hidden",
+        position: "relative",
+      }}
+    >
+      <div
+        style={{
+          height: "100%",
+          width: "100%",
+          background: `linear-gradient(90deg, ${F.pageBg} 0%, #E9ECEF 50%, ${F.pageBg} 100%)`,
+          backgroundSize: "200% 100%",
+          animation: "dashShimmer 1.5s infinite",
+        }}
+      />
+    </div>
+  )
+}
+
+function AnalyticsDonutChart({
+  segments,
+  size = 170,
+  strokeWidth = 28,
+}: {
+  segments: { label: string; value: number; color: string }[]
+  size?: number
+  strokeWidth?: number
+}) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+  const total = segments.reduce((s, seg) => s + seg.value, 0)
+
+  if (total === 0) {
+    return (
+      <div
+        style={{
+          color: F.text3,
+          fontSize: 13,
+          padding: 30,
+          textAlign: "center",
+        }}
+      >
+        No breakdown data available for this period
+      </div>
+    )
+  }
+
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  const center = size / 2
+
+  let accumulated = 0
+  const activeSeg = hoveredIdx !== null ? segments[hoveredIdx] : null
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 24,
+        flexWrap: "wrap",
+        padding: "8px 0",
+      }}
+    >
+      {/* SVG Chart */}
+      <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+        <svg
+          width={size}
+          height={size}
+          style={{ transform: "rotate(-90deg)", overflow: "visible" }}
+        >
+          {/* Background circle */}
+          <circle
+            cx={center}
+            cy={center}
+            r={radius}
+            fill="none"
+            stroke={F.pageBg}
+            strokeWidth={strokeWidth}
+          />
+          {segments.map((seg, i) => {
+            const pct = seg.value / total
+            const dashLen = pct * circumference
+            const offset = -(accumulated / total) * circumference
+            accumulated += seg.value
+            const isHovered = hoveredIdx === i
+
+            return (
+              <circle
+                key={seg.label}
+                cx={center}
+                cy={center}
+                r={radius}
+                fill="none"
+                stroke={seg.color}
+                strokeWidth={isHovered ? strokeWidth + 4 : strokeWidth}
+                strokeDasharray={`${Math.max(0, dashLen - 2)} ${circumference - Math.max(0, dashLen - 2)}`}
+                strokeDashoffset={offset}
+                strokeLinecap="round"
+                onMouseEnter={() => setHoveredIdx(i)}
+                onMouseLeave={() => setHoveredIdx(null)}
+                style={{
+                  cursor: "pointer",
+                  transition: "stroke-width 0.2s ease, opacity 0.2s ease",
+                  opacity: hoveredIdx !== null && !isHovered ? 0.45 : 1,
+                }}
+              />
+            )
+          })}
+        </svg>
+
+        {/* Center label */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: size,
+            height: size,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            textAlign: "center",
+            padding: 10,
+          }}
+        >
+          {activeSeg ? (
+            <>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: F.text2,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {activeSeg.label}
+              </div>
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 800,
+                  color: F.text1,
+                  marginTop: 2,
+                }}
+              >
+                {inr(activeSeg.value)}
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: activeSeg.color,
+                  fontWeight: 700,
+                }}
+              >
+                {Math.round((activeSeg.value / total) * 100)}%
+              </div>
+            </>
+          ) : (
+            <>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: F.text2,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                Total Gross
+              </div>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 800,
+                  color: F.text1,
+                  marginTop: 2,
+                }}
+              >
+                {inr(total)}
+              </div>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: F.text3,
+                  marginTop: 1,
+                }}
+              >
+                100%
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Legend list */}
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          flex: 1,
+          minWidth: 160,
+        }}
+      >
+        {segments.map((seg, i) => {
+          const isHovered = hoveredIdx === i
+          const pct = Math.round((seg.value / total) * 100)
+          return (
+            <div
+              key={seg.label}
+              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseLeave={() => setHoveredIdx(null)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "6px 10px",
+                borderRadius: 6,
+                background: isHovered ? F.pageBg : "transparent",
+                cursor: "pointer",
+                transition: "background 0.15s ease",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 3,
+                    background: seg.color,
+                    flexShrink: 0,
+                  }}
+                />
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: isHovered ? 700 : 500,
+                    color: isHovered ? F.text1 : F.text2,
+                  }}
+                >
+                  {seg.label}
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: F.text1,
+                  }}
+                >
+                  {inr(seg.value)}
+                </span>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: F.text3,
+                    minWidth: 32,
+                    textAlign: "right",
+                  }}
+                >
+                  {pct}%
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function DualBarTrendChart({
+  data,
+}: {
+  data: {
+    period: string
+    gross: number
+    deductions: number
+    net: number
+    status: string
+  }[]
+}) {
+  const [viewMode, setViewMode] = useState<"both" | "net" | "gross">("both")
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+
+  if (data.length === 0) {
+    return (
+      <div
+        style={{
+          color: F.text3,
+          fontSize: 13,
+          padding: 40,
+          textAlign: "center",
+        }}
+      >
+        No payroll trend data available
+      </div>
+    )
+  }
+
+  const maxVal = Math.max(
+    ...data.map((d) => (viewMode === "net" ? d.net : d.gross)),
+    50000,
+  )
+  const chartH = 180
+  const yTicks = [
+    maxVal,
+    Math.round((maxVal * 0.75) / 1000) * 1000,
+    Math.round((maxVal * 0.5) / 1000) * 1000,
+    Math.round((maxVal * 0.25) / 1000) * 1000,
+    0,
+  ]
+
+  return (
+    <div>
+      {/* Header controls & legend */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 16,
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        {/* Legend */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {(viewMode === "both" || viewMode === "gross") && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 2,
+                  background: "#93C5FD",
+                }}
+              />
+              <span style={{ fontSize: 12, color: F.text2, fontWeight: 500 }}>
+                Gross Salary
+              </span>
+            </div>
+          )}
+          {(viewMode === "both" || viewMode === "net") && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 2,
+                  background: F.brand,
+                }}
+              />
+              <span style={{ fontSize: 12, color: F.text2, fontWeight: 500 }}>
+                Net Pay (Take-Home)
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* View mode toggle button pills */}
+        <div
+          style={{
+            display: "inline-flex",
+            background: F.pageBg,
+            padding: 2,
+            borderRadius: 6,
+            border: `1px solid ${F.border}`,
+          }}
+        >
+          {(
+            [
+              ["both", "Combined"],
+              ["net", "Net Pay"],
+              ["gross", "Gross Pay"],
+            ] as const
+          ).map(([key, title]) => {
+            const active = viewMode === key
+            return (
+              <button
+                key={key}
+                onClick={() => setViewMode(key)}
+                style={{
+                  padding: "4px 10px",
+                  fontSize: 11,
+                  fontWeight: active ? 700 : 500,
+                  background: active ? F.card : "transparent",
+                  color: active ? F.brand : F.text2,
+                  border: "none",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  boxShadow: active ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {title}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Main Chart Canvas with Y-axis and Bars */}
+      <div style={{ display: "flex", gap: 8, height: chartH + 34, position: "relative" }}>
+        {/* Y-axis labels */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            height: chartH,
+            paddingRight: 6,
+            minWidth: 46,
+            textAlign: "right",
+          }}
+        >
+          {yTicks.map((val, idx) => (
+            <span
+              key={idx}
+              style={{
+                fontSize: 10,
+                color: F.text3,
+                lineHeight: 1,
+              }}
+            >
+              {val >= 1000 ? `₹${Math.round(val / 1000)}k` : `₹${val}`}
+            </span>
+          ))}
+        </div>
+
+        {/* Bars Container */}
+        <div
+          style={{
+            flex: 1,
+            position: "relative",
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {/* Horizontal Gridlines */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              height: chartH,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              pointerEvents: "none",
+            }}
+          >
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                style={{
+                  borderBottom: `1px ${i === 4 ? "solid" : "dashed"} ${F.border}`,
+                  width: "100%",
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Bar Columns */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              gap: 8,
+              height: chartH,
+              position: "relative",
+              zIndex: 1,
+            }}
+          >
+            {data.map((d, i) => {
+              const grossH = Math.max(6, (d.gross / maxVal) * chartH)
+              const netH = Math.max(6, (d.net / maxVal) * chartH)
+              const isHovered = hoveredIdx === i
+
+              return (
+                <div
+                  key={d.period}
+                  onMouseEnter={() => setHoveredIdx(i)}
+                  onMouseLeave={() => setHoveredIdx(null)}
+                  style={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    height: "100%",
+                    justifyContent: "flex-end",
+                    cursor: "pointer",
+                    position: "relative",
+                  }}
+                >
+                  {/* Floating tooltip on hover */}
+                  {isHovered && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: Math.max(grossH, netH) + 12,
+                        background: "#1E293B",
+                        color: "#FFFFFF",
+                        padding: "8px 12px",
+                        borderRadius: 6,
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.18)",
+                        fontSize: 11,
+                        whiteSpace: "nowrap",
+                        zIndex: 20,
+                        pointerEvents: "none",
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          fontSize: 12,
+                          marginBottom: 3,
+                          color: "#F8FAFC",
+                        }}
+                      >
+                        {d.period} ({d.status})
+                      </div>
+                      <div style={{ color: "#94A3B8" }}>
+                        Gross:{" "}
+                        <strong style={{ color: "#93C5FD" }}>
+                          {inr(d.gross)}
+                        </strong>
+                      </div>
+                      <div style={{ color: "#94A3B8" }}>
+                        Deductions:{" "}
+                        <strong style={{ color: "#FCA5A5" }}>
+                          {inr(d.deductions)}
+                        </strong>
+                      </div>
+                      <div
+                        style={{
+                          color: "#94A3B8",
+                          borderTop: "1px solid #334155",
+                          paddingTop: 3,
+                          marginTop: 3,
+                        }}
+                      >
+                        Net Take-Home:{" "}
+                        <strong style={{ color: "#4ADE80" }}>
+                          {inr(d.net)}
+                        </strong>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bars */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "flex-end",
+                      gap: 3,
+                      width: "100%",
+                      maxWidth: viewMode === "both" ? 44 : 26,
+                      justifyContent: "center",
+                    }}
+                  >
+                    {(viewMode === "both" || viewMode === "gross") && (
+                      <div
+                        style={{
+                          flex: 1,
+                          height: grossH,
+                          background: isHovered
+                            ? "#60A5FA"
+                            : "linear-gradient(180deg, #93C5FD 0%, #60A5FA 100%)",
+                          borderRadius: "4px 4px 0 0",
+                          transition: "height 0.4s ease, background 0.2s ease",
+                        }}
+                      />
+                    )}
+                    {(viewMode === "both" || viewMode === "net") && (
+                      <div
+                        style={{
+                          flex: 1,
+                          height: netH,
+                          background: isHovered
+                            ? F.brandHover
+                            : `linear-gradient(180deg, ${F.brand} 0%, ${F.brandHover} 100%)`,
+                          borderRadius: "4px 4px 0 0",
+                          transition: "height 0.4s ease, background 0.2s ease",
+                        }}
+                      />
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* X-axis labels */}
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginTop: 8,
+              height: 20,
+            }}
+          >
+            {data.map((d, i) => {
+              const parts = d.period.split(" ")
+              const shortLabel = parts[0]?.slice(0, 3) || d.period
+              const isHovered = hoveredIdx === i
+
+              return (
+                <div
+                  key={d.period}
+                  style={{
+                    flex: 1,
+                    textAlign: "center",
+                    fontSize: 10,
+                    fontWeight: isHovered ? 700 : 500,
+                    color: isHovered ? F.brand : F.text2,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {shortLabel}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SalaryDistributionBar({
+  structure,
+}: {
+  structure?: SalaryStructure
+}) {
+  if (!structure) {
+    return (
+      <div style={{ color: F.text3, fontSize: 12, padding: 10 }}>
+        No salary structure linked
+      </div>
+    )
+  }
+
+  const components = [
+    { label: "Basic Pay", value: Number(structure.basic), color: F.brand },
+    { label: "HRA", value: Number(structure.hra), color: "#00A389" },
+    {
+      label: "Fixed Allowance",
+      value: Number(structure.fixedAllowance),
+      color: "#F59E0B",
+    },
+    {
+      label: "Special Allowance",
+      value: Number(structure.specialAllowance),
+      color: "#8B5CF6",
+    },
+  ]
+
+  const total = components.reduce((s, c) => s + c.value, 0)
+  if (total === 0) return null
+
+  return (
+    <div>
+      {/* Horizontal stacked progress bar */}
+      <div
+        style={{
+          display: "flex",
+          height: 10,
+          borderRadius: 6,
+          overflow: "hidden",
+          background: F.pageBg,
+          gap: 2,
+        }}
+      >
+        {components.map((c) => {
+          const pct = (c.value / total) * 100
+          return (
+            <div
+              key={c.label}
+              style={{
+                width: `${pct}%`,
+                background: c.color,
+                transition: "width 0.5s ease",
+              }}
+              title={`${c.label}: ${inr(c.value)} (${Math.round(pct)}%)`}
+            />
+          )
+        })}
+      </div>
+
+      {/* Aligned items below */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "8px 16px",
+          marginTop: 14,
+        }}
+      >
+        {components.map((c) => {
+          const pct = Math.round((c.value / total) * 100)
+          return (
+            <div
+              key={c.label}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                fontSize: 12,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: c.color,
+                  }}
+                />
+                <span style={{ color: F.text2 }}>{c.label}</span>
+              </div>
+              <div style={{ fontWeight: 700, color: F.text1 }}>
+                {inr(c.value)}{" "}
+                <span style={{ color: F.text3, fontSize: 10, fontWeight: 500 }}>
+                  ({pct}%)
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function EmployeeDashboardView({
+  emp,
+  payruns,
+  structures,
+  onNav,
+}: {
+  emp: Employee
+  payruns: Payrun[]
+  structures: SalaryStructure[]
+  onNav: (view: string) => void
+}) {
+  const ready = useDelayedLoad(350)
+  const { text: greeting, icon: greetingIcon } = getTimeGreeting()
+  const todayFormatted = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
+  const rows = employeeRows(emp, payruns)
+  const completed = rows.filter((item) => item.run.status === "Completed")
+  const latestCompleted = completed[completed.length - 1] ?? rows[rows.length - 1]
+  const salary = structures.find((item) => item.name === emp.salaryStructure)
+
+  // Financial year scope (April–March)
+  const now = new Date()
+  const fyStartYear =
+    now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
+  const isFY = (run: Payrun) =>
+    (run.year === fyStartYear && run.month >= 4) ||
+    (run.year === fyStartYear + 1 && run.month <= 3)
+  const fyRows = rows.filter(
+    (item) => isFY(item.run) && item.run.status === "Completed",
+  )
+
+  // YTD calculations
+  const ytdGross = fyRows.reduce(
+    (sum, item) => sum + item.row.totalEarnings,
+    0,
+  )
+  const ytdDeductions = fyRows.reduce(
+    (sum, item) => sum + item.row.totalDeductions,
+    0,
+  )
+  const ytdNet = fyRows.reduce((sum, item) => sum + item.row.netSalary, 0)
+  const ytdLopDays = fyRows.reduce((sum, item) => sum + item.row.lopDays, 0)
+  const ytdLopAmount = fyRows.reduce(
+    (sum, item) => sum + item.row.lopDeduction,
+    0,
+  )
+
+  // Trend dataset (Last 12 months)
+  const trendData = rows.slice(-12).map(({ run, row }) => ({
+    period: run.period,
+    gross: row.totalEarnings,
+    deductions: row.totalDeductions,
+    net: row.netSalary,
+    status: run.status,
+  }))
+
+  // Donut chart segments for latest completed payslip
+  const donutSegments = latestCompleted
+    ? [
+        {
+          label: "Take-Home Net",
+          value: latestCompleted.row.netSalary,
+          color: F.success,
+        },
+        { label: "Provident Fund", value: latestCompleted.row.pf, color: F.brand },
+        { label: "Income Tax (TDS)", value: latestCompleted.row.tds, color: F.warning },
+        {
+          label: "Professional Tax",
+          value: latestCompleted.row.profTax,
+          color: "#8B5CF6",
+        },
+        ...(latestCompleted.row.esi > 0
+          ? [{ label: "ESI Deduction", value: latestCompleted.row.esi, color: "#64748B" }]
+          : []),
+        ...(latestCompleted.row.lopDeduction > 0
+          ? [
+              {
+                label: "LOP Deduction",
+                value: latestCompleted.row.lopDeduction,
+                color: F.error,
+              },
+            ]
+          : []),
+      ]
+    : []
+
+  // Recent payroll status
+  const recentPayruns = rows.slice().reverse().slice(0, 3)
+
+  const cardStyle: React.CSSProperties = {
+    background: F.card,
+    border: `1px solid ${F.border}`,
+    borderRadius: 8,
+    padding: "20px 22px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+  }
+
+  const deductionRatio = ytdGross > 0 ? Math.round((ytdDeductions / ytdGross) * 100) : 0
+  const takeHomeRatio = ytdGross > 0 ? Math.round((ytdNet / ytdGross) * 100) : 0
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* ── Top Header Profile & Status Banner ── */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          padding: "20px 24px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 20,
+          flexWrap: "wrap",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        }}
+      >
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <div
+            style={{
+              width: 58,
+              height: 58,
+              borderRadius: "50%",
+              background: `linear-gradient(135deg, ${F.brand}, #0854A0)`,
+              color: "#FFFFFF",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 20,
+              fontWeight: 800,
+              boxShadow: "0 2px 8px rgba(0,112,242,0.25)",
+            }}
+          >
+            {emp.name
+              .split(" ")
+              .map((part) => part[0])
+              .join("")}
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: F.text2,
+                }}
+              >
+                EMPLOYEE WORKSPACE
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: F.brand,
+                  background: F.infoBg,
+                  padding: "2px 10px",
+                  borderRadius: 12,
+                }}
+              >
+                {todayFormatted}
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 18 }}>{greetingIcon}</span>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: 24,
+                  fontWeight: 800,
+                  color: F.text1,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {greeting}, <span style={{ fontWeight: 800 }}>{emp.name.split(" ")[0]}</span>
+              </h1>
+              <Badge
+                label={emp.status}
+                color={F.success}
+                bg={F.successBg}
+                dot={F.success}
+              />
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 13,
+                color: F.text2,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <span>{emp.designation}</span>
+              <span>&bull;</span>
+              <span>{emp.department}</span>
+              <span>&bull;</span>
+              <span>{emp.location}</span>
+              <span>&bull;</span>
+              <span style={{ color: F.text3 }}>ID: {emp.id}</span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              textAlign: "right",
+              paddingRight: 12,
+              borderRight: `1px solid ${F.border}`,
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, color: F.text3 }}>
+              FINANCIAL YEAR
+            </div>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: F.text1,
+                marginTop: 2,
+              }}
+            >
+              FY {fyStartYear}&ndash;{(fyStartYear + 1).toString().slice(2)}
+            </div>
+          </div>
+          {latestCompleted && (
+            <Btn
+              onClick={() => onNav("payslips")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                fontWeight: 700,
+              }}
+            >
+              <span>View Latest Payslip</span>
+              <span style={{ fontSize: 14 }}>&rarr;</span>
+            </Btn>
+          )}
+        </div>
+      </div>
+
+      {/* ── KPI Metric Summary Cards Grid (4 Columns) ── */}
+      {!ready ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+          }}
+        >
+          {[1, 2, 3, 4].map((i) => (
+            <SkeletonCard key={i} height={124} />
+          ))}
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 16,
+          }}
+        >
+          <EmployeeMetricCard
+            label="YTD Gross Earnings"
+            value={inr(ytdGross)}
+            sub={`${fyRows.length} completed payruns in FY ${fyStartYear}-${(fyStartYear + 1).toString().slice(2)}`}
+            accent={F.brand}
+            badgeText="Gross"
+            badgeBg={F.infoBg}
+            badgeColor={F.brand}
+            progress={100}
+          />
+          <EmployeeMetricCard
+            label="YTD Total Deductions"
+            value={inr(ytdDeductions)}
+            sub={`${deductionRatio}% statutory & tax deductions from gross`}
+            accent={F.warning}
+            badgeText={`${deductionRatio}% Ratio`}
+            badgeBg={F.warningBg}
+            badgeColor={F.warning}
+            progress={deductionRatio}
+          />
+          <EmployeeMetricCard
+            label="YTD Net Take-Home"
+            value={inr(ytdNet)}
+            sub={`${takeHomeRatio}% net realization across FY`}
+            accent={F.success}
+            badgeText="Take-Home"
+            badgeBg={F.successBg}
+            badgeColor={F.success}
+            progress={takeHomeRatio}
+          />
+          <EmployeeMetricCard
+            label="Loss Of Pay (LOP)"
+            value={`${ytdLopDays} ${ytdLopDays === 1 ? "Day" : "Days"}`}
+            sub={
+              ytdLopAmount > 0
+                ? `${inr(ytdLopAmount)} total salary deduction`
+                : "Perfect attendance record this FY"
+            }
+            accent={ytdLopDays > 0 ? F.error : "#00A389"}
+            badgeText={ytdLopDays > 0 ? "LOP Impact" : "No Deductions"}
+            badgeBg={ytdLopDays > 0 ? F.errorBg : "#E6F4EA"}
+            badgeColor={ytdLopDays > 0 ? F.error : "#137333"}
+          />
+        </div>
+      )}
+
+      {/* ── Main Analytics Section: Dual Bar Trend + Donut Breakdown ── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.45fr) minmax(320px, 0.95fr)",
+          gap: 20,
+        }}
+      >
+        {/* Left Card: Monthly Trend Bar Graph */}
+        <section style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: 16,
+              gap: 12,
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: F.text1,
+                }}
+              >
+                Earnings & Net Pay Trend
+              </h2>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: 12,
+                  color: F.text2,
+                }}
+              >
+                Monthly Gross salary vs Net Take-Home pay over recent pay cycles
+              </p>
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: F.text3,
+                fontWeight: 600,
+                background: F.pageBg,
+                padding: "3px 8px",
+                borderRadius: 4,
+              }}
+            >
+              Last 12 Months
+            </div>
+          </div>
+          {!ready ? (
+            <SkeletonCard height={240} />
+          ) : (
+            <DualBarTrendChart data={trendData} />
+          )}
+        </section>
+
+        {/* Right Card: Donut / Pie Chart Breakdown */}
+        <section style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: F.text1,
+                }}
+              >
+                Period Breakdown
+              </h2>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: 12,
+                  color: F.text2,
+                }}
+              >
+                {latestCompleted?.run.period ?? "Latest cycle"} salary composition
+              </p>
+            </div>
+            {latestCompleted && (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: F.brand,
+                  background: F.infoBg,
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                }}
+              >
+                {latestCompleted.run.period}
+              </span>
+            )}
+          </div>
+          {!ready ? (
+            <SkeletonCard height={240} />
+          ) : (
+            <AnalyticsDonutChart segments={donutSegments} />
+          )}
+        </section>
+      </div>
+
+      {/* ── Lower Section: Recent Payslips Ledger + Right Side Cards ── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.4fr) minmax(320px, 1fr)",
+          gap: 20,
+        }}
+      >
+        {/* Left: Recent Payslips Table */}
+        <section style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: F.text1,
+                }}
+              >
+                Recent Payslips
+              </h2>
+              <p
+                style={{
+                  margin: "3px 0 0",
+                  fontSize: 12,
+                  color: F.text2,
+                }}
+              >
+                Verified historical pay run receipts and net disbursements
+              </p>
+            </div>
+            <Btn small variant="secondary" onClick={() => onNav("payslips")}>
+              View All Payslips
+            </Btn>
+          </div>
+
+          {!ready ? (
+            <SkeletonCard height={180} />
+          ) : completed.length === 0 ? (
+            <div
+              style={{
+                color: F.text3,
+                fontSize: 13,
+                padding: "30px 0",
+                textAlign: "center",
+              }}
+            >
+              No completed payslips recorded yet.
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  textAlign: "left",
+                  fontSize: 12,
+                }}
+              >
+                <thead>
+                  <tr
+                    style={{
+                      borderBottom: `1px solid ${F.border}`,
+                      color: F.text2,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    <th style={{ padding: "8px 6px" }}>Period</th>
+                    <th style={{ padding: "8px 6px", textAlign: "right" }}>
+                      Gross
+                    </th>
+                    <th style={{ padding: "8px 6px", textAlign: "right" }}>
+                      Deductions
+                    </th>
+                    <th style={{ padding: "8px 6px", textAlign: "right" }}>
+                      Net Pay
+                    </th>
+                    <th style={{ padding: "8px 6px", textAlign: "center" }}>
+                      Status
+                    </th>
+                    <th style={{ padding: "8px 6px", textAlign: "right" }}>
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {completed
+                    .slice()
+                    .reverse()
+                    .slice(0, 5)
+                    .map(({ run, row }) => (
+                      <tr
+                        key={run.id}
+                        style={{
+                          borderBottom: `1px solid ${F.border}60`,
+                          transition: "background 0.15s ease",
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: "12px 6px",
+                            fontWeight: 700,
+                            color: F.text1,
+                          }}
+                        >
+                          {run.period}
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px 6px",
+                            textAlign: "right",
+                            color: F.text2,
+                          }}
+                        >
+                          {inr(row.totalEarnings)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px 6px",
+                            textAlign: "right",
+                            color: F.warning,
+                          }}
+                        >
+                          {inr(row.totalDeductions)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px 6px",
+                            textAlign: "right",
+                            fontWeight: 800,
+                            color: F.success,
+                          }}
+                        >
+                          {inr(row.netSalary)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px 6px",
+                            textAlign: "center",
+                          }}
+                        >
+                          {prBadge(run.status)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "12px 6px",
+                            textAlign: "right",
+                          }}
+                        >
+                          <button
+                            onClick={() => onNav("payslips")}
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: F.brand,
+                              fontWeight: 700,
+                              cursor: "pointer",
+                              fontSize: 12,
+                              padding: "4px 8px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            Open &rarr;
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {/* Right: Salary Structure & Quick Actions */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Salary Structure Distribution */}
+          <section style={cardStyle}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: 12,
+              }}
+            >
+              <div>
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: 16,
+                    fontWeight: 800,
+                    color: F.text1,
+                  }}
+                >
+                  Salary Structure
+                </h2>
+                <p
+                  style={{
+                    margin: "3px 0 0",
+                    fontSize: 12,
+                    color: F.text2,
+                  }}
+                >
+                  {emp.salaryStructure}
+                </p>
+              </div>
+              <Btn small variant="secondary" onClick={() => onNav("salary")}>
+                View Breakdown
+              </Btn>
+            </div>
+
+            {!ready ? (
+              <SkeletonCard height={140} />
+            ) : (
+              <SalaryDistributionBar structure={salary} />
+            )}
+          </section>
+
+          {/* Payroll Run Cycle Status Tracker */}
+          <section style={cardStyle}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: F.text2,
+                marginBottom: 12,
+              }}
+            >
+              Payroll Processing Status
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {recentPayruns.map(({ run }) => (
+                <div
+                  key={run.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "10px 14px",
+                    background: F.pageBg,
+                    borderRadius: 6,
+                    border: `1px solid ${F.border}80`,
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        color: F.text1,
+                        fontWeight: 700,
+                        fontSize: 13,
+                      }}
+                    >
+                      {run.period}
+                    </div>
+                    <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
+                      Year {run.year} &bull; Month {run.month}
+                    </div>
+                  </div>
+                  {prBadge(run.status)}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Quick Access Shortcuts */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 12,
+            }}
+          >
+            <button
+              onClick={() => onNav("salary")}
+              style={{
+                background: F.card,
+                border: `1px solid ${F.border}`,
+                borderRadius: 8,
+                padding: "14px 16px",
+                textAlign: "left",
+                cursor: "pointer",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                transition: "border-color 0.2s ease, transform 0.2s ease",
+              }}
+            >
+              <div
+                style={{
+                  color: F.brand,
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}
+              >
+                Salary Details &rarr;
+              </div>
+              <div style={{ color: F.text2, fontSize: 11, marginTop: 4 }}>
+                Review component breakdown
+              </div>
+            </button>
+            <button
+              onClick={() => onNav("financial")}
+              style={{
+                background: F.card,
+                border: `1px solid ${F.border}`,
+                borderRadius: 8,
+                padding: "14px 16px",
+                textAlign: "left",
+                cursor: "pointer",
+                boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                transition: "border-color 0.2s ease, transform 0.2s ease",
+              }}
+            >
+              <div
+                style={{
+                  color: F.brand,
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}
+              >
+                Tax & Declarations &rarr;
+              </div>
+              <div style={{ color: F.text2, fontSize: 11, marginTop: 4 }}>
+                Regimes and proofs
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MySalaryView({
+  emp,
+  structures,
+  onNav,
+}: {
+  emp: Employee
+  structures: SalaryStructure[]
+  onNav?: (view: string) => void
+}) {
+  const [componentSearch, setComponentSearch] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "earnings" | "deductions">("all")
+  const [viewMode, setViewMode] = useState<"monthly" | "annual">("monthly")
+  const [showAnnexure, setShowAnnexure] = useState(false)
+
+  const s = structures.find((item) => item.name === emp.salaryStructure)
+  const multiplier = viewMode === "annual" ? 12 : 1
+
+  // Base earnings components
+  const earningsComponents = s
+    ? [
+        {
+          name: "Basic Salary",
+          category: "Fixed Earnings",
+          monthly: Number(s.basic),
+          annual: Number(s.basic) * 12,
+          taxability: "Taxable as per Income Tax Slabs",
+          color: F.brand,
+        },
+        {
+          name: "House Rent Allowance (HRA)",
+          category: "Fixed Allowance",
+          monthly: Number(s.hra),
+          annual: Number(s.hra) * 12,
+          taxability: "Exempt u/s 10(13A) on actual rent paid (Old Regime)",
+          color: "#00A389",
+        },
+        {
+          name: "Fixed Allowance",
+          category: "Supplementary Allowance",
+          monthly: Number(s.fixedAllowance),
+          annual: Number(s.fixedAllowance) * 12,
+          taxability: "Fully Taxable",
+          color: "#F59E0B",
+        },
+        {
+          name: "Special Allowance",
+          category: "Performance / Role Allowance",
+          monthly: Number(s.specialAllowance),
+          annual: Number(s.specialAllowance) * 12,
+          taxability: "Fully Taxable",
+          color: "#8B5CF6",
+        },
+      ]
+    : []
+
+  const totalMonthlyGross = earningsComponents.reduce((sum, c) => sum + c.monthly, 0) || emp.grossSalary
+  const totalAnnualGross = totalMonthlyGross * 12
+
+  // Statutory deductions estimate
+  const pfMonthly = Math.round(Number(s?.basic || 0) * 0.12) || 7200
+  const ptMonthly = 200
+  const estTdsMonthly = Math.round(totalMonthlyGross * 0.08)
+  const totalMonthlyDeductions = pfMonthly + ptMonthly + estTdsMonthly
+  const totalAnnualDeductions = totalMonthlyDeductions * 12
+
+  const deductionComponents = [
+    {
+      name: "Provident Fund (Employee PF)",
+      type: "Statutory",
+      monthly: pfMonthly,
+      annual: pfMonthly * 12,
+      act: "EPF Act, 1952 (12% of Basic)",
+      note: "Deposited to EPFO member account",
+    },
+    {
+      name: "Professional Tax (PT)",
+      type: "Statutory",
+      monthly: ptMonthly,
+      annual: ptMonthly * 12,
+      act: "State Professional Tax Act",
+      note: "Standard monthly state contribution",
+    },
+    {
+      name: "Income Tax Estimate (TDS)",
+      type: "Tax Deduction",
+      monthly: estTdsMonthly,
+      annual: estTdsMonthly * 12,
+      act: "Income Tax Act, 1961 (Sec 192)",
+      note: "Projected monthly tax withholding",
+    },
+  ]
+
+  // F4 Value Help list
+  const f4Values = [
+    "Basic Salary",
+    "House Rent Allowance (HRA)",
+    "Fixed Allowance",
+    "Special Allowance",
+    "Provident Fund (Employee PF)",
+    "Professional Tax (PT)",
+    "Income Tax Estimate (TDS)",
+  ]
+
+  // Filtered earnings
+  const filteredEarnings = earningsComponents.filter((c) => {
+    if (categoryFilter === "deductions") return false
+    if (!componentSearch) return true
+    const searchLower = componentSearch.toLowerCase()
+    return (
+      c.name.toLowerCase().includes(searchLower) ||
+      c.category.toLowerCase().includes(searchLower)
+    )
+  })
+
+  // Filtered deductions
+  const filteredDeductions = deductionComponents.filter((d) => {
+    if (categoryFilter === "earnings") return false
+    if (!componentSearch) return true
+    const searchLower = componentSearch.toLowerCase()
+    return (
+      d.name.toLowerCase().includes(searchLower) ||
+      d.type.toLowerCase().includes(searchLower)
+    )
+  })
+
+  const hasFilter = Boolean(componentSearch || categoryFilter !== "all")
+  const estMonthlyTakeHome = totalMonthlyGross - totalMonthlyDeductions
+  const estAnnualTakeHome = totalAnnualGross - totalAnnualDeductions
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* ── Page Header ── */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 16,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 24,
+              fontWeight: 800,
+              color: F.text1,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            My Salary & Compensation
+          </h1>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
+            Current structure: <strong>{emp.salaryStructure}</strong> &bull; Employment: {emp.empType}
+          </p>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {/* Monthly / Annual CTC Toggle */}
+          <div
+            style={{
+              display: "inline-flex",
+              background: F.pageBg,
+              padding: 2,
+              borderRadius: 6,
+              border: `1px solid ${F.border}`,
+            }}
+          >
+            <button
+              onClick={() => setViewMode("monthly")}
+              style={{
+                padding: "6px 14px",
+                fontSize: 12,
+                fontWeight: viewMode === "monthly" ? 700 : 500,
+                background: viewMode === "monthly" ? F.card : "transparent",
+                color: viewMode === "monthly" ? F.brand : F.text2,
+                border: "none",
+                borderRadius: 4,
+                cursor: "pointer",
+                boxShadow: viewMode === "monthly" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                transition: "all 0.15s ease",
+              }}
+            >
+              Monthly Breakdown
+            </button>
+            <button
+              onClick={() => setViewMode("annual")}
+              style={{
+                padding: "6px 14px",
+                fontSize: 12,
+                fontWeight: viewMode === "annual" ? 700 : 500,
+                background: viewMode === "annual" ? F.card : "transparent",
+                color: viewMode === "annual" ? F.brand : F.text2,
+                border: "none",
+                borderRadius: 4,
+                cursor: "pointer",
+                boxShadow: viewMode === "annual" ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                transition: "all 0.15s ease",
+              }}
+            >
+              Annualized (CTC)
+            </button>
+          </div>
+
+          <Btn
+            variant="secondary"
+            onClick={() => setShowAnnexure(true)}
+            style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700 }}
+          >
+            <span>Compensation Annexure</span>
+            <span style={{ fontSize: 14 }}>&darr;</span>
+          </Btn>
+        </div>
+      </div>
+
+      {/* ── 4 KPI Summary Cards ── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 16,
+        }}
+      >
+        <EmployeeMetricCard
+          label={viewMode === "annual" ? "Annual Gross CTC" : "Monthly Gross Salary"}
+          value={inr(viewMode === "annual" ? totalAnnualGross : totalMonthlyGross)}
+          sub="Fixed gross remuneration before statutory deductions"
+          accent={F.brand}
+          badgeText={viewMode === "annual" ? "Annual" : "Monthly"}
+          badgeBg={F.infoBg}
+          badgeColor={F.brand}
+          progress={100}
+        />
+        <EmployeeMetricCard
+          label={viewMode === "annual" ? "Est. Annual Deductions" : "Est. Monthly Deductions"}
+          value={inr(viewMode === "annual" ? totalAnnualDeductions : totalMonthlyDeductions)}
+          sub="Includes EPF (12%), Professional Tax & TDS withholding"
+          accent={F.warning}
+          badgeText="Statutory"
+          badgeBg={F.warningBg}
+          badgeColor={F.warning}
+          progress={Math.round((totalMonthlyDeductions / totalMonthlyGross) * 100)}
+        />
+        <EmployeeMetricCard
+          label={viewMode === "annual" ? "Est. Annual Take-Home" : "Est. Net Take-Home"}
+          value={inr(viewMode === "annual" ? estAnnualTakeHome : estMonthlyTakeHome)}
+          sub="Projected net realization credited to salary account"
+          accent={F.success}
+          badgeText="In-Hand"
+          badgeBg={F.successBg}
+          badgeColor={F.success}
+          progress={Math.round((estMonthlyTakeHome / totalMonthlyGross) * 100)}
+        />
+        <EmployeeMetricCard
+          label="Tax Regime Preference"
+          value="New Regime"
+          sub="Income Tax Sec 115BAC with Standard Deduction"
+          accent="#8B5CF6"
+          badgeText="Active"
+          badgeBg="#F5F3FF"
+          badgeColor="#7C3AED"
+        />
+      </div>
+
+      {/* ── Visual Salary Proportional Distribution Bar ── */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          padding: "18px 22px",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 12,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              color: F.text2,
+            }}
+          >
+            Component Distribution Overview
+          </span>
+          <span style={{ fontSize: 12, color: F.text3 }}>
+            Total Remuneration: {inr(viewMode === "annual" ? totalAnnualGross : totalMonthlyGross)}
+          </span>
+        </div>
+        <SalaryDistributionBar structure={s} />
+      </div>
+
+      {/* ── Filters & F4 Search Bar ── */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          padding: "16px 20px",
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 16,
+          flexWrap: "wrap",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+        }}
+      >
+        {/* F4 Value Help Search */}
+        <div style={{ flex: 2, minWidth: 260 }}>
+          <ValueHelp
+            label="Search Salary Component (F4 Search)"
+            value={componentSearch}
+            onChange={setComponentSearch}
+            placeholder="Type or pick from F4 value help…"
+            values={f4Values}
+          />
+        </div>
+
+        {/* Category Filter Pills */}
+        <div style={{ flex: 1.5, minWidth: 240 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: F.text2,
+              marginBottom: 3,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            Category Filter
+          </div>
+          <div
+            style={{
+              display: "flex",
+              background: F.pageBg,
+              padding: 2,
+              borderRadius: 6,
+              border: `1px solid ${F.border}`,
+            }}
+          >
+            {(
+              [
+                ["all", "All"],
+                ["earnings", "Earnings Only"],
+                ["deductions", "Deductions Only"],
+              ] as const
+            ).map(([cat, label]) => {
+              const active = categoryFilter === cat
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setCategoryFilter(cat)}
+                  style={{
+                    flex: 1,
+                    padding: "6px 8px",
+                    fontSize: 11,
+                    fontWeight: active ? 700 : 500,
+                    background: active ? F.card : "transparent",
+                    color: active ? F.brand : F.text2,
+                    border: "none",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                    boxShadow: active ? "0 1px 2px rgba(0,0,0,0.08)" : "none",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Reset Action */}
+        {hasFilter && (
+          <button
+            onClick={() => {
+              setComponentSearch("")
+              setCategoryFilter("all")
+            }}
+            style={{
+              background: F.pageBg,
+              border: `1px solid ${F.border}`,
+              borderRadius: 6,
+              padding: "7px 14px",
+              color: F.text2,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              height: 34,
+            }}
+          >
+            <span>&times;</span>
+            <span>Reset Filters</span>
+          </button>
+        )}
+      </div>
+
+      {/* ── Earnings Component Table ── */}
+      {(categoryFilter === "all" || categoryFilter === "earnings") && (
+        <div
+          style={{
+            background: F.card,
+            border: `1px solid ${F.border}`,
+            borderRadius: 8,
+            overflow: "hidden",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+          }}
+        >
+          <div
+            style={{
+              padding: "16px 20px",
+              borderBottom: `1px solid ${F.border}`,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: `linear-gradient(90deg, ${F.card}, ${F.infoBg})`,
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+                Earnings Components
+              </h2>
+              <div style={{ fontSize: 12, color: F.text2, marginTop: 2 }}>
+                Regular taxable and exempt monthly salary elements
+              </div>
+            </div>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: F.brand,
+                background: F.card,
+                padding: "4px 10px",
+                borderRadius: 20,
+                border: `1px solid ${F.brand}30`,
+              }}
+            >
+              {filteredEarnings.length} of {earningsComponents.length} components
+            </span>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
+              <thead>
+                <tr
+                  style={{
+                    borderBottom: `1px solid ${F.border}`,
+                    color: F.text2,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    background: F.pageBg,
+                  }}
+                >
+                  <th style={{ padding: "10px 18px" }}>Component Name</th>
+                  <th style={{ padding: "10px 14px" }}>Classification</th>
+                  <th style={{ padding: "10px 14px", textAlign: "right" }}>
+                    {viewMode === "annual" ? "Annual Amount" : "Monthly Amount"}
+                  </th>
+                  <th style={{ padding: "10px 14px", textAlign: "right" }}>% of Gross</th>
+                  <th style={{ padding: "10px 18px" }}>Taxability & Exemptions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEarnings.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: 30, textAlign: "center", color: F.text3 }}>
+                      No earnings match the search filter "{componentSearch}"
+                    </td>
+                  </tr>
+                ) : (
+                  filteredEarnings.map((c) => {
+                    const amount = c.monthly * multiplier
+                    const pct = Math.round((c.monthly / totalMonthlyGross) * 100)
+                    return (
+                      <tr
+                        key={c.name}
+                        style={{
+                          borderBottom: `1px solid ${F.border}60`,
+                          transition: "background 0.12s ease",
+                        }}
+                      >
+                        <td style={{ padding: "14px 18px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: 3,
+                                background: c.color,
+                                flexShrink: 0,
+                              }}
+                            />
+                            <strong style={{ color: F.text1 }}>{c.name}</strong>
+                          </div>
+                        </td>
+                        <td style={{ padding: "14px 14px", color: F.text2 }}>{c.category}</td>
+                        <td
+                          style={{
+                            padding: "14px 14px",
+                            textAlign: "right",
+                            fontWeight: 700,
+                            color: F.text1,
+                          }}
+                        >
+                          {inr(amount)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "14px 14px",
+                            textAlign: "right",
+                            color: F.text3,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {pct}%
+                        </td>
+                        <td style={{ padding: "14px 18px", color: F.text2, fontSize: 12 }}>
+                          {c.taxability}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+              <tfoot>
+                <tr
+                  style={{
+                    background: F.pageBg,
+                    borderTop: `2px solid ${F.border}`,
+                    fontWeight: 800,
+                  }}
+                >
+                  <td style={{ padding: "14px 18px", color: F.text1 }} colSpan={2}>
+                    Total Gross Earnings
+                  </td>
+                  <td style={{ padding: "14px 14px", textAlign: "right", color: F.brand, fontSize: 15 }}>
+                    {inr(viewMode === "annual" ? totalAnnualGross : totalMonthlyGross)}
+                  </td>
+                  <td style={{ padding: "14px 14px", textAlign: "right", color: F.brand }}>100%</td>
+                  <td style={{ padding: "14px 18px", color: F.text3, fontSize: 11 }}>
+                    Base for Income Tax calculation
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Deductions Component Table ── */}
+      {(categoryFilter === "all" || categoryFilter === "deductions") && (
+        <div
+          style={{
+            background: F.card,
+            border: `1px solid ${F.border}`,
+            borderRadius: 8,
+            overflow: "hidden",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+          }}
+        >
+          <div
+            style={{
+              padding: "16px 20px",
+              borderBottom: `1px solid ${F.border}`,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: `linear-gradient(90deg, ${F.card}, ${F.warningBg})`,
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+                Statutory Deductions & Contributions
+              </h2>
+              <div style={{ fontSize: 12, color: F.text2, marginTop: 2 }}>
+                Mandatory withholdings deducted from monthly salary
+              </div>
+            </div>
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: F.warning,
+                background: F.card,
+                padding: "4px 10px",
+                borderRadius: 20,
+                border: `1px solid ${F.warning}30`,
+              }}
+            >
+              {filteredDeductions.length} of {deductionComponents.length} items
+            </span>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13 }}>
+              <thead>
+                <tr
+                  style={{
+                    borderBottom: `1px solid ${F.border}`,
+                    color: F.text2,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    background: F.pageBg,
+                  }}
+                >
+                  <th style={{ padding: "10px 18px" }}>Deduction Item</th>
+                  <th style={{ padding: "10px 14px" }}>Type</th>
+                  <th style={{ padding: "10px 14px", textAlign: "right" }}>
+                    {viewMode === "annual" ? "Annual Estimated" : "Monthly Estimated"}
+                  </th>
+                  <th style={{ padding: "10px 18px" }}>Regulatory Act / Mandate</th>
+                  <th style={{ padding: "10px 18px" }}>Remarks</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDeductions.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: 30, textAlign: "center", color: F.text3 }}>
+                      No deductions match the search filter "{componentSearch}"
+                    </td>
+                  </tr>
+                ) : (
+                  filteredDeductions.map((d) => {
+                    const amount = d.monthly * multiplier
+                    return (
+                      <tr
+                        key={d.name}
+                        style={{
+                          borderBottom: `1px solid ${F.border}60`,
+                          transition: "background 0.12s ease",
+                        }}
+                      >
+                        <td style={{ padding: "14px 18px" }}>
+                          <strong style={{ color: F.text1 }}>{d.name}</strong>
+                        </td>
+                        <td style={{ padding: "14px 14px", color: F.text2 }}>{d.type}</td>
+                        <td
+                          style={{
+                            padding: "14px 14px",
+                            textAlign: "right",
+                            fontWeight: 700,
+                            color: F.warning,
+                          }}
+                        >
+                          {inr(amount)}
+                        </td>
+                        <td style={{ padding: "14px 18px", color: F.text2, fontSize: 12 }}>
+                          {d.act}
+                        </td>
+                        <td style={{ padding: "14px 18px", color: F.text3, fontSize: 12 }}>
+                          {d.note}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+              <tfoot>
+                <tr
+                  style={{
+                    background: F.pageBg,
+                    borderTop: `2px solid ${F.border}`,
+                    fontWeight: 800,
+                  }}
+                >
+                  <td style={{ padding: "14px 18px", color: F.text1 }} colSpan={2}>
+                    Total Estimated Deductions
+                  </td>
+                  <td style={{ padding: "14px 14px", textAlign: "right", color: F.warning, fontSize: 15 }}>
+                    {inr(viewMode === "annual" ? totalAnnualDeductions : totalMonthlyDeductions)}
+                  </td>
+                  <td style={{ padding: "14px 18px", color: F.text3, fontSize: 11 }} colSpan={2}>
+                    Directly subtracted from Gross to calculate Net Pay
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Read-only Notice & HR Contact Banner ── */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderLeft: `4px solid ${F.brand}`,
+          borderRadius: 8,
+          padding: "16px 20px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <strong style={{ color: F.text1, fontSize: 14 }}>
+            Official Compensation Record
+          </strong>
+          <div style={{ color: F.text2, fontSize: 12, marginTop: 4, lineHeight: 1.4 }}>
+            Salary component structures are revised in accordance with corporate policy. For inquiries regarding allowances, tax declarations, or structure revisions, contact human resources.
+          </div>
+        </div>
+        {onNav && (
+          <Btn small variant="secondary" onClick={() => onNav("financial")}>
+            Manage Tax Proofs &rarr;
+          </Btn>
+        )}
+      </div>
+
+      {/* ── Compensation Annexure Modal ── */}
+      {showAnnexure && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            zIndex: 999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+          }}
+          onClick={() => setShowAnnexure(false)}
+        >
+          <div
+            style={{
+              background: F.card,
+              borderRadius: 8,
+              padding: 28,
+              maxWidth: 680,
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                borderBottom: `1px solid ${F.border}`,
+                paddingBottom: 14,
+                marginBottom: 16,
+              }}
+            >
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, color: F.text1 }}>
+                  Annexure A &mdash; Compensation Summary
+                </h3>
+                <div style={{ fontSize: 12, color: F.text2, marginTop: 2 }}>
+                  Employee: {emp.name} ({emp.id}) &bull; {emp.designation}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAnnexure(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: 22,
+                  cursor: "pointer",
+                  color: F.text3,
+                }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, fontSize: 13 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${F.border}60` }}>
+                <span style={{ color: F.text2 }}>Salary Structure:</span>
+                <strong>{emp.salaryStructure}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${F.border}60` }}>
+                <span style={{ color: F.text2 }}>Monthly Gross Salary:</span>
+                <strong style={{ color: F.brand }}>{inr(totalMonthlyGross)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${F.border}60` }}>
+                <span style={{ color: F.text2 }}>Annual Gross CTC:</span>
+                <strong style={{ color: F.brand }}>{inr(totalAnnualGross)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${F.border}60` }}>
+                <span style={{ color: F.text2 }}>Estimated Annual In-Hand:</span>
+                <strong style={{ color: F.success }}>{inr(estAnnualTakeHome)}</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${F.border}60` }}>
+                <span style={{ color: F.text2 }}>PF Contribution (Employee):</span>
+                <span>{inr(pfMonthly * 12)} / year</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${F.border}60` }}>
+                <span style={{ color: F.text2 }}>Professional Tax:</span>
+                <span>{inr(ptMonthly * 12)} / year</span>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end", gap: 12 }}>
+              <Btn variant="secondary" onClick={() => setShowAnnexure(false)}>
+                Close
+              </Btn>
+              <Btn onClick={() => window.print()}>Print / Save Statement</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PayrollHistoryView({
+  emp,
+  payruns,
+  onNav,
+}: {
+  emp: Employee
+  payruns: Payrun[]
+  onNav?: (view: string) => void
+}) {
+  const [periodSearch, setPeriodSearch] = useState("")
+  const [yearFilter, setYearFilter] = useState<string>("all")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc")
+  const [selectedRun, setSelectedRun] = useState<{
+    run: Payrun
+    row: PayrunInputRow
+  } | null>(null)
+
+  // Extract all completed and historical runs for this employee
+  const runs = ownPayruns(payruns, emp.id)
+    .map((run) => ({
+      run,
+      row: run.rows.find((item) => item.empId === emp.id)!,
+    }))
+    .filter((item) => Boolean(item.row))
+
+  // F4 Value Help list for periods
+  const f4Periods = Array.from(new Set(runs.map((r) => r.run.period)))
+  const availableYears = Array.from(new Set(runs.map((r) => String(r.run.year)))).sort().reverse()
+
+  // Apply filters
+  const filteredRuns = runs
+    .filter(({ run }) => {
+      // F4 Period filter / search
+      if (periodSearch) {
+        if (!run.period.toLowerCase().includes(periodSearch.toLowerCase())) {
+          return false
+        }
+      }
+      // Year filter
+      if (yearFilter !== "all" && String(run.year) !== yearFilter) {
+        return false
+      }
+      // Status filter
+      if (statusFilter !== "all" && run.status !== statusFilter) {
+        return false
+      }
+      return true
+    })
+    .sort((a, b) => {
+      const aVal = a.run.year * 100 + a.run.month
+      const bVal = b.run.year * 100 + b.run.month
+      return sortOrder === "desc" ? bVal - aVal : aVal - bVal
+    })
+
+  // Calculations for summary KPI cards
+  const completedRuns = runs.filter((r) => r.run.status === "Completed")
+  const totalDisbursedYtd = completedRuns.reduce((sum, r) => sum + r.row.netSalary, 0)
+  const totalGrossYtd = completedRuns.reduce((sum, r) => sum + r.row.totalEarnings, 0)
+  const avgMonthlyNet = completedRuns.length > 0 ? Math.round(totalDisbursedYtd / completedRuns.length) : 0
+  const latestCompleted = completedRuns[completedRuns.length - 1]
+
+  const hasActiveFilters = Boolean(periodSearch || yearFilter !== "all" || statusFilter !== "all")
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* ── Top Header ── */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 16,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 24,
+              fontWeight: 800,
+              color: F.text1,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Payroll History & Disbursements
+          </h1>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
+            Complete ledger of past compensation cycles, deductions, and payment receipts
+          </p>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          {onNav && (
+            <Btn
+              variant="secondary"
+              onClick={() => onNav("payslips")}
+              style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 700 }}
+            >
+              <span>Payslips Portal</span>
+              <span style={{ fontSize: 14 }}>&rarr;</span>
+            </Btn>
+          )}
+        </div>
+      </div>
+
+      {/* ── 4 KPI Summary Cards ── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 16,
+        }}
+      >
+        <EmployeeMetricCard
+          label="Completed Payroll Cycles"
+          value={`${completedRuns.length} Cycles`}
+          sub="Verified and finalized disbursements on file"
+          accent={F.brand}
+          badgeText="Disbursed"
+          badgeBg={F.infoBg}
+          badgeColor={F.brand}
+          progress={100}
+        />
+        <EmployeeMetricCard
+          label="Total Net Disbursed (YTD)"
+          value={inr(totalDisbursedYtd)}
+          sub={`From ${inr(totalGrossYtd)} total cumulative gross`}
+          accent={F.success}
+          badgeText="Take-Home"
+          badgeBg={F.successBg}
+          badgeColor={F.success}
+          progress={totalGrossYtd > 0 ? Math.round((totalDisbursedYtd / totalGrossYtd) * 100) : 0}
+        />
+        <EmployeeMetricCard
+          label="Avg. Monthly Take-Home"
+          value={inr(avgMonthlyNet)}
+          sub="Average in-hand salary per processed cycle"
+          accent="#00A389"
+          badgeText="Average"
+          badgeBg="#E6F4EA"
+          badgeColor="#137333"
+        />
+        <EmployeeMetricCard
+          label="Latest Disbursed Period"
+          value={latestCompleted?.run.period ?? "None"}
+          sub={latestCompleted ? `Disbursed on ${fmtD(latestCompleted.run.generatedOn)}` : "No completed runs"}
+          accent="#8B5CF6"
+          badgeText="Latest"
+          badgeBg="#F5F3FF"
+          badgeColor="#7C3AED"
+        />
+      </div>
+
+      {/* ── Filters & F4 Value Search Bar ── */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          padding: "16px 20px",
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 16,
+          flexWrap: "wrap",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+        }}
+      >
+        {/* F4 Value Help Search for Pay Period */}
+        <div style={{ flex: 2, minWidth: 260 }}>
+          <ValueHelp
+            label="Search Pay Period (F4 Search)"
+            value={periodSearch}
+            onChange={setPeriodSearch}
+            placeholder="Search or pick pay period (e.g. July 2026)…"
+            values={f4Periods}
+          />
+        </div>
+
+        {/* Year Filter */}
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: F.text2,
+              marginBottom: 3,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            Year
+          </div>
+          <select
+            value={yearFilter}
+            onChange={(e) => setYearFilter(e.target.value)}
+            style={{ ...iSt, cursor: "pointer" }}
+          >
+            <option value="all">All Years</option>
+            {availableYears.map((yr) => (
+              <option key={yr} value={yr}>
+                Year {yr}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Status Filter */}
+        <div style={{ flex: 1, minWidth: 150 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: F.text2,
+              marginBottom: 3,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            Run Status
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ ...iSt, cursor: "pointer" }}
+          >
+            <option value="all">All Statuses</option>
+            <option value="Completed">Completed</option>
+            <option value="Approved">Approved</option>
+            <option value="Under Review">Under Review</option>
+            <option value="Draft">Draft</option>
+          </select>
+        </div>
+
+        {/* Sort Order Toggle */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: F.text2,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            Order
+          </div>
+          <button
+            onClick={() => setSortOrder(sortOrder === "desc" ? "asc" : "desc")}
+            style={{
+              background: F.pageBg,
+              border: `1px solid ${F.border}`,
+              borderRadius: 6,
+              padding: "7px 12px",
+              color: F.text1,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              height: 34,
+            }}
+            title="Toggle Sort Order"
+          >
+            <span>{sortOrder === "desc" ? "Newest First ↓" : "Oldest First ↑"}</span>
+          </button>
+        </div>
+
+        {/* Reset Filters */}
+        {hasActiveFilters && (
+          <button
+            onClick={() => {
+              setPeriodSearch("")
+              setYearFilter("all")
+              setStatusFilter("all")
+            }}
+            style={{
+              background: F.pageBg,
+              border: `1px solid ${F.border}`,
+              borderRadius: 6,
+              padding: "7px 14px",
+              color: F.text2,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              height: 34,
+            }}
+          >
+            <span>&times;</span>
+            <span>Clear Filters</span>
+          </button>
+        )}
+      </div>
+
+      {/* ── Payroll History Table ── */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          overflow: "hidden",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+        }}
+      >
+        <div
+          style={{
+            padding: "16px 20px",
+            borderBottom: `1px solid ${F.border}`,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            background: F.card,
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+              Historical Payroll Ledger
+            </h2>
+            <div style={{ fontSize: 12, color: F.text2, marginTop: 2 }}>
+              Showing {filteredRuns.length} of {runs.length} recorded pay cycles
+            </div>
+          </div>
+          {filteredRuns.length > 0 && (
+            <span style={{ fontSize: 12, color: F.text3 }}>
+              Click any row to open itemized disbursement details
+            </span>
+          )}
+        </div>
+
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: 13, minWidth: 700 }}>
+            <thead>
+              <tr
+                style={{
+                  borderBottom: `1px solid ${F.border}`,
+                  color: F.text2,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                  background: F.pageBg,
+                }}
+              >
+                <th style={{ padding: "10px 18px" }}>Pay Period</th>
+                <th style={{ padding: "10px 14px" }}>Disbursed Date</th>
+                <th style={{ padding: "10px 14px", textAlign: "right" }}>Gross Earnings</th>
+                <th style={{ padding: "10px 14px", textAlign: "right" }}>Total Deductions</th>
+                <th style={{ padding: "10px 14px", textAlign: "right" }}>Net Salary</th>
+                <th style={{ padding: "10px 14px" }}>Reference</th>
+                <th style={{ padding: "10px 14px", textAlign: "center" }}>Status</th>
+                <th style={{ padding: "10px 18px", textAlign: "right" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRuns.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: 48, textAlign: "center", color: F.text3 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: F.text2, marginBottom: 6 }}>
+                      No payroll records match your filter criteria
+                    </div>
+                    <div style={{ fontSize: 12, color: F.text3 }}>
+                      Try selecting another period with F4 search or reset your filters.
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredRuns.map(({ run, row }) => (
+                  <tr
+                    key={run.id}
+                    onClick={() => setSelectedRun({ run, row })}
+                    style={{
+                      borderBottom: `1px solid ${F.border}60`,
+                      cursor: "pointer",
+                      transition: "background 0.12s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = F.pageBg
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent"
+                    }}
+                  >
+                    <td style={{ padding: "14px 18px" }}>
+                      <div style={{ fontWeight: 800, color: F.text1 }}>{run.period}</div>
+                      <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
+                        Month {run.month} &bull; {run.year}
+                      </div>
+                    </td>
+                    <td style={{ padding: "14px 14px", color: F.text2 }}>
+                      {fmtD(run.generatedOn)}
+                    </td>
+                    <td style={{ padding: "14px 14px", textAlign: "right", color: F.text2, fontWeight: 600 }}>
+                      {inr(row.totalEarnings)}
+                    </td>
+                    <td style={{ padding: "14px 14px", textAlign: "right", color: F.warning, fontWeight: 600 }}>
+                      <span>{inr(row.totalDeductions)}</span>
+                      {row.lopDays > 0 && (
+                        <span
+                          style={{
+                            display: "block",
+                            fontSize: 10,
+                            color: F.error,
+                            fontWeight: 700,
+                          }}
+                        >
+                          ({row.lopDays}d LOP)
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: "14px 14px", textAlign: "right", fontWeight: 800, color: F.success, fontSize: 14 }}>
+                      {inr(row.netSalary)}
+                    </td>
+                    <td style={{ padding: "14px 14px", color: F.text3, fontSize: 11 }}>
+                      PR-{run.id.slice(0, 8)}
+                    </td>
+                    <td style={{ padding: "14px 14px", textAlign: "center" }}>
+                      {prBadge(run.status)}
+                    </td>
+                    <td style={{ padding: "14px 18px", textAlign: "right" }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedRun({ run, row })
+                        }}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          color: F.brand,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          fontSize: 12,
+                          padding: "4px 8px",
+                          borderRadius: 4,
+                        }}
+                      >
+                        Details &rarr;
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── SlidePanel / Drawer for Itemized Payrun Details ── */}
+      {selectedRun && (
+        <SlidePanel
+          title={`Disbursement Details &mdash; ${selectedRun.run.period}`}
+          sub={`Status: ${selectedRun.run.status} &bull; Processed on ${fmtD(selectedRun.run.generatedOn)}`}
+          onClose={() => setSelectedRun(null)}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {/* Net Amount Banner */}
+            <div
+              style={{
+                background: `linear-gradient(135deg, ${F.successBg}, #E8F5E9)`,
+                border: `1px solid ${F.success}30`,
+                borderRadius: 8,
+                padding: "18px 20px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: F.text2, textTransform: "uppercase" }}>
+                  Net Take-Home Disbursed
+                </div>
+                <div style={{ fontSize: 26, fontWeight: 800, color: F.success, marginTop: 4 }}>
+                  {inr(selectedRun.row.netSalary)}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                {prBadge(selectedRun.run.status)}
+                <div style={{ fontSize: 11, color: F.text3, marginTop: 4 }}>
+                  Ref: PR-{selectedRun.run.id}
+                </div>
+              </div>
+            </div>
+
+            {/* Earnings Breakdown */}
+            <div
+              style={{
+                background: F.pageBg,
+                borderRadius: 8,
+                padding: "16px 18px",
+                border: `1px solid ${F.border}`,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  color: F.text2,
+                  marginBottom: 10,
+                }}
+              >
+                Earnings Breakdown
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: F.text2 }}>Gross Base Salary:</span>
+                  <strong>{inr(selectedRun.row.grossSalary)}</strong>
+                </div>
+                {selectedRun.row.bonus > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: F.text2 }}>Bonus:</span>
+                    <strong style={{ color: F.brand }}>+{inr(selectedRun.row.bonus)}</strong>
+                  </div>
+                )}
+                {selectedRun.row.incentive > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: F.text2 }}>Incentive:</span>
+                    <strong style={{ color: F.brand }}>+{inr(selectedRun.row.incentive)}</strong>
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    borderTop: `1px solid ${F.border}`,
+                    paddingTop: 8,
+                    fontWeight: 700,
+                  }}
+                >
+                  <span>Total Earnings:</span>
+                  <span style={{ color: F.brand }}>{inr(selectedRun.row.totalEarnings)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Deductions Breakdown */}
+            <div
+              style={{
+                background: F.pageBg,
+                borderRadius: 8,
+                padding: "16px 18px",
+                border: `1px solid ${F.border}`,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  color: F.text2,
+                  marginBottom: 10,
+                }}
+              >
+                Statutory & Other Deductions
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, fontSize: 13 }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: F.text2 }}>Provident Fund (EPF):</span>
+                  <strong>{inr(selectedRun.row.pf)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: F.text2 }}>TDS (Income Tax):</span>
+                  <strong>{inr(selectedRun.row.tds)}</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: F.text2 }}>Professional Tax:</span>
+                  <strong>{inr(selectedRun.row.profTax)}</strong>
+                </div>
+                {selectedRun.row.esi > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: F.text2 }}>ESI Contribution:</span>
+                    <strong>{inr(selectedRun.row.esi)}</strong>
+                  </div>
+                )}
+                {selectedRun.row.lopDeduction > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span style={{ color: F.error }}>Loss of Pay ({selectedRun.row.lopDays} days):</span>
+                    <strong style={{ color: F.error }}>-{inr(selectedRun.row.lopDeduction)}</strong>
+                  </div>
+                )}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    borderTop: `1px solid ${F.border}`,
+                    paddingTop: 8,
+                    fontWeight: 700,
+                  }}
+                >
+                  <span>Total Deductions:</span>
+                  <span style={{ color: F.warning }}>{inr(selectedRun.row.totalDeductions)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+              {onNav && (
+                <Btn
+                  onClick={() => {
+                    setSelectedRun(null)
+                    onNav("payslips")
+                  }}
+                  style={{ flex: 1 }}
+                >
+                  Open Full Payslip
+                </Btn>
+              )}
+              <Btn variant="secondary" onClick={() => setSelectedRun(null)}>
+                Close
+              </Btn>
+            </div>
+          </div>
+        </SlidePanel>
+      )}
+    </div>
+  )
+}
+
+function EmployeePayslipsView({
+  emp,
+  payruns,
+}: {
+  emp: Employee
+  payruns: Payrun[]
+}) {
+  const [selected, setSelected] = useState<{
+    run: Payrun
+    row: PayrunInputRow
+  } | null>(null)
+  const [periodSearch, setPeriodSearch] = useState("")
+  const [selectedYear, setSelectedYear] = useState("all")
+
+  const runs = ownPayruns(payruns, emp.id).filter(
+    (r) => r.status === "Completed",
+  )
+
+  const f4Periods = Array.from(new Set(runs.map((r) => r.period)))
+  const availableYears = Array.from(
+    new Set(runs.map((r) => String(r.year))),
+  ).sort().reverse()
+
+  const filteredRuns = runs.filter((run) => {
+    if (periodSearch && !run.period.toLowerCase().includes(periodSearch.toLowerCase())) {
+      return false
+    }
+    if (selectedYear !== "all" && String(run.year) !== selectedYear) {
+      return false
+    }
+    return true
+  })
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* Page Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 22,
+              fontWeight: 800,
+              color: F.text1,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            My Payslips
+          </h1>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
+            Secure digital payslip archive & salary statements
+          </p>
+        </div>
+        <div style={{ fontSize: 12, color: F.text3, fontWeight: 600 }}>
+          {filteredRuns.length} Payslip{filteredRuns.length !== 1 ? "s" : ""} Available
+        </div>
+      </div>
+
+      {/* Filter & F4 Search Toolbar */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          padding: "14px 18px",
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 14,
+          flexWrap: "wrap",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
+        }}
+      >
+        <div style={{ flex: 2, minWidth: 240 }}>
+          <ValueHelp
+            label="Search Pay Period (F4 Search)"
+            value={periodSearch}
+            onChange={setPeriodSearch}
+            placeholder="Search period (e.g. July 2026)…"
+            values={f4Periods}
+          />
+        </div>
+
+        <div style={{ width: 140 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: F.text2,
+              marginBottom: 3,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            Filter Year
+          </div>
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(e.target.value)}
+            style={{ ...iSt, cursor: "pointer" }}
+          >
+            <option value="all">All Years</option>
+            {availableYears.map((yr) => (
+              <option key={yr} value={yr}>
+                {yr}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {(periodSearch || selectedYear !== "all") && (
+          <button
+            onClick={() => {
+              setPeriodSearch("")
+              setSelectedYear("all")
+            }}
+            style={{
+              background: F.pageBg,
+              border: `1px solid ${F.border}`,
+              borderRadius: 6,
+              padding: "7px 12px",
+              color: F.text2,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              height: 34,
+            }}
+          >
+            Clear Filters
+          </button>
+        )}
+      </div>
+
+      {/* Payslips Table */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          overflow: "hidden",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+        }}
+      >
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620, fontSize: 13 }}>
+          <thead>
+            <tr
+              style={{
+                borderBottom: `1px solid ${F.border}`,
+                background: F.pageBg,
+                color: F.text2,
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+            >
+              <th style={{ padding: "12px 18px", textAlign: "left" }}>Pay Period</th>
+              <th style={{ padding: "12px 14px", textAlign: "right" }}>Gross Earnings</th>
+              <th style={{ padding: "12px 14px", textAlign: "right" }}>Deductions</th>
+              <th style={{ padding: "12px 14px", textAlign: "right" }}>Net Take-Home</th>
+              <th style={{ padding: "12px 18px", textAlign: "right" }}>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRuns.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ padding: 40, textAlign: "center", color: F.text3 }}>
+                  No payslips match your search criteria.
+                </td>
+              </tr>
+            ) : (
+              filteredRuns.map((run) => {
+                const row = run.rows.find((r) => r.empId === emp.id)!
+                return (
+                  <tr
+                    key={run.id}
+                    onClick={() => setSelected({ run, row })}
+                    style={{
+                      borderBottom: `1px solid ${F.border}60`,
+                      cursor: "pointer",
+                      transition: "background 0.12s ease",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = F.pageBg)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    <td style={{ padding: "14px 18px" }}>
+                      <div style={{ fontWeight: 800, color: F.text1 }}>{run.period}</div>
+                      <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
+                        Generated: {fmtD(run.generatedOn)}
+                      </div>
+                    </td>
+                    <td style={{ padding: "14px 14px", textAlign: "right", color: F.text2, fontWeight: 600 }}>
+                      {inr(row.totalEarnings)}
+                    </td>
+                    <td style={{ padding: "14px 14px", textAlign: "right", color: F.warning, fontWeight: 600 }}>
+                      {inr(row.totalDeductions)}
+                    </td>
+                    <td style={{ padding: "14px 14px", textAlign: "right" }}>
+                      <strong style={{ color: F.success, fontSize: 14 }}>
+                        {inr(row.netSalary)}
+                      </strong>
+                    </td>
+                    <td style={{ padding: "14px 18px", textAlign: "right" }}>
+                      <Btn
+                        small
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelected({ run, row })
+                        }}
+                      >
+                        View Payslip &rarr;
+                      </Btn>
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {selected && (
+        <Modal
+          title={`Payslip Sheet — ${selected.run.period}`}
+          onClose={() => setSelected(null)}
+          wide
+        >
+          <PayslipSheet row={selected.row} run={selected.run} emp={emp} />
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+function DocumentsView() {
+  const [docSearch, setDocSearch] = useState("")
+  const [categoryFilter, setCategoryFilter] = useState("all")
+  const [previewDoc, setPreviewDoc] = useState<{
+    name: string
+    date: string
+    type: string
+    size: string
+    desc: string
+  } | null>(null)
+
+  const docs = [
+    {
+      name: "Employment Offer Letter",
+      date: "15 Mar 2021",
+      type: "Employment",
+      size: "420 KB",
+      desc: "Official appointment contract and terms of employment.",
+    },
+    {
+      name: "Annual Promotion & Appraisal Letter",
+      date: "01 Apr 2024",
+      type: "Career",
+      size: "310 KB",
+      desc: "Designation revision and compensation enhancement notification.",
+    },
+    {
+      name: "Form 16 Tax Certificate (FY 2025-26)",
+      date: "15 Jun 2026",
+      type: "Tax",
+      size: "850 KB",
+      desc: "Part A & Part B TDS certificate issued under Section 203.",
+    },
+    {
+      name: "Non-Disclosure Agreement (NDA)",
+      date: "15 Mar 2021",
+      type: "Compliance",
+      size: "280 KB",
+      desc: "Confidentiality agreement signed at onboarding.",
+    },
+  ]
+
+  const categories = Array.from(new Set(docs.map((d) => d.type)))
+  const f4DocNames = docs.map((d) => d.name)
+
+  const filteredDocs = docs.filter((doc) => {
+    if (docSearch && !doc.name.toLowerCase().includes(docSearch.toLowerCase())) {
+      return false
+    }
+    if (categoryFilter !== "all" && doc.type !== categoryFilter) {
+      return false
+    }
+    return true
+  })
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* Page Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 22,
+              fontWeight: 800,
+              color: F.text1,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            My Documents
+          </h1>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
+            HR-issued employment letters, tax certificates, and compliance records
+          </p>
+        </div>
+        <div style={{ fontSize: 12, color: F.text3, fontWeight: 600 }}>
+          {filteredDocs.length} Document{filteredDocs.length !== 1 ? "s" : ""} Available
+        </div>
+      </div>
+
+      {/* Filter & F4 Search Toolbar */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          padding: "14px 18px",
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 14,
+          flexWrap: "wrap",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
+        }}
+      >
+        <div style={{ flex: 2, minWidth: 240 }}>
+          <ValueHelp
+            label="Search Document Name (F4 Search)"
+            value={docSearch}
+            onChange={setDocSearch}
+            placeholder="Search document name (e.g. Offer Letter)…"
+            values={f4DocNames}
+          />
+        </div>
+
+        <div style={{ width: 160 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: F.text2,
+              marginBottom: 3,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            Category Filter
+          </div>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            style={{ ...iSt, cursor: "pointer" }}
+          >
+            <option value="all">All Categories</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>
+                {cat}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {(docSearch || categoryFilter !== "all") && (
+          <button
+            onClick={() => {
+              setDocSearch("")
+              setCategoryFilter("all")
+            }}
+            style={{
+              background: F.pageBg,
+              border: `1px solid ${F.border}`,
+              borderRadius: 6,
+              padding: "7px 12px",
+              color: F.text2,
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              height: 34,
+            }}
+          >
+            Clear Filters
+          </button>
+        )}
+      </div>
+
+      {/* Documents Table */}
+      <div
+        style={{
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          overflow: "hidden",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+        }}
+      >
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 600, fontSize: 13 }}>
+          <thead>
+            <tr
+              style={{
+                borderBottom: `1px solid ${F.border}`,
+                background: F.pageBg,
+                color: F.text2,
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+              }}
+            >
+              <th style={{ padding: "12px 18px", textAlign: "left" }}>Document Title</th>
+              <th style={{ padding: "12px 14px", textAlign: "left" }}>Issue Date</th>
+              <th style={{ padding: "12px 14px", textAlign: "center" }}>Category</th>
+              <th style={{ padding: "12px 14px", textAlign: "left" }}>File Format</th>
+              <th style={{ padding: "12px 18px", textAlign: "right" }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredDocs.length === 0 ? (
+              <tr>
+                <td colSpan={5} style={{ padding: 36, textAlign: "center", color: F.text3 }}>
+                  No documents match your filter criteria.
+                </td>
+              </tr>
+            ) : (
+              filteredDocs.map((doc) => (
+                <tr
+                  key={doc.name}
+                  style={{
+                    borderBottom: `1px solid ${F.border}60`,
+                    transition: "background 0.12s ease",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = F.pageBg)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                >
+                  <td style={{ padding: "14px 18px" }}>
+                    <div style={{ fontWeight: 800, color: F.text1 }}>{doc.name}</div>
+                    <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
+                      {doc.desc}
+                    </div>
+                  </td>
+                  <td style={{ padding: "14px 14px", color: F.text2 }}>{doc.date}</td>
+                  <td style={{ padding: "14px 14px", textAlign: "center" }}>
+                    <Badge label={doc.type} color={F.brand} bg={F.infoBg} />
+                  </td>
+                  <td style={{ padding: "14px 14px", color: F.text3, fontSize: 12 }}>
+                    PDF ({doc.size})
+                  </td>
+                  <td style={{ padding: "14px 18px", textAlign: "right" }}>
+                    <Btn small onClick={() => setPreviewDoc(doc)}>
+                      View Document &rarr;
+                    </Btn>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* SAP Fiori Info Note */}
+      <div
+        style={{
+          padding: "14px 18px",
+          borderLeft: `4px solid ${F.brand}`,
+          background: F.card,
+          border: `1px solid ${F.border}`,
+          borderLeftColor: F.brand,
+          borderRadius: 8,
+          color: F.text2,
+          fontSize: 12,
+          lineHeight: 1.5,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <div>
+          <strong style={{ color: F.text1 }}>Document Storage Policy:</strong> Documents issued by HR are read-only and digitally verified. New letters or tax forms appear automatically upon release.
+        </div>
+      </div>
+
+      {/* Document Preview Modal */}
+      {previewDoc && (
+        <Modal
+          title={`Document Viewer — ${previewDoc.name}`}
+          onClose={() => setPreviewDoc(null)}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div
+              style={{
+                background: F.pageBg,
+                border: `1px solid ${F.border}`,
+                borderRadius: 8,
+                padding: "20px 24px",
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 700, color: F.brand, textTransform: "uppercase" }}>
+                {previewDoc.type} DOCUMENT
+              </div>
+              <h3 style={{ margin: "4px 0 6px", fontSize: 18, color: F.text1 }}>
+                {previewDoc.name}
+              </h3>
+              <p style={{ margin: 0, fontSize: 13, color: F.text2 }}>
+                Issued on {previewDoc.date} &bull; File Size: {previewDoc.size}
+              </p>
+            </div>
+
+            <div
+              style={{
+                border: `1px dashed ${F.border}`,
+                borderRadius: 8,
+                padding: 40,
+                textAlign: "center",
+                background: F.card,
+              }}
+            >
+              <div style={{ fontSize: 32, marginBottom: 8 }}>📄</div>
+              <strong style={{ color: F.text1, fontSize: 14, display: "block" }}>
+                Digitally Signed & Verified Document
+              </strong>
+              <div style={{ color: F.text2, fontSize: 12, marginTop: 4 }}>
+                {previewDoc.desc}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <Btn variant="secondary" onClick={() => setPreviewDoc(null)}>
+                Close
+              </Btn>
+              <Btn onClick={() => window.alert(`Downloading ${previewDoc.name}...`)}>
+                Download PDF
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+function FinancialDataView({
+  emp,
+  payruns,
+}: {
+  emp: Employee
+  payruns: Payrun[]
+}) {
+  const toast = useToast()
+  const [regime, setRegime] = useState("new")
+  const [confirmModal, setConfirmModal] = useState(false)
+  const [activeTab, setActiveTab] = useState<"regime" | "declarations" | "deductions">("regime")
+
+  const latest = ownPayruns(payruns, emp.id)
+    .find((r) => r.status === "Completed")
+    ?.rows.find((r) => r.empId === emp.id)
+
+  const declarations = [
+    { section: "Sec 80C", name: "Life Insurance & EPF", declared: "₹1,50,000", status: "Verified" },
+    { section: "Sec 80D", name: "Health Insurance Premium", declared: "₹25,000", status: "Under Review" },
+    { section: "Sec 24(b)", name: "Home Loan Interest", declared: "₹2,00,000", status: "Declared" },
+    { section: "Sec 80CCD", name: "National Pension Scheme (NPS)", declared: "₹50,000", status: "Verified" },
+  ]
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* Page Header */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 22,
+              fontWeight: 800,
+              color: F.text1,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Financial Data & Tax Portal
+          </h1>
+          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
+            Income tax regime preference, investment declarations, and statutory withholdings
+          </p>
+        </div>
+        <Badge
+          label="Tax Year 2026-27"
+          color={F.brand}
+          bg={F.infoBg}
+        />
+      </div>
+
+      {/* Navigation Tabs in Fiori Style */}
+      <div
+        style={{
+          display: "flex",
+          borderBottom: `1px solid ${F.border}`,
+          gap: 20,
+        }}
+      >
+        {(
+          [
+            ["regime", "Tax Regime Selection"],
+            ["declarations", "Investment Declarations"],
+            ["deductions", "Statutory Deductions Summary"],
+          ] as const
+        ).map(([tabKey, label]) => {
+          const active = activeTab === tabKey
+          return (
+            <button
+              key={tabKey}
+              onClick={() => setActiveTab(tabKey)}
+              style={{
+                background: "none",
+                border: "none",
+                borderBottom: `3px solid ${active ? F.brand : "transparent"}`,
+                padding: "10px 4px",
+                fontSize: 13,
+                fontWeight: active ? 700 : 500,
+                color: active ? F.brand : F.text2,
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+            >
+              {label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* TAB 1: Tax Regime Selection */}
+      {activeTab === "regime" && (
+        <div
+          style={{
+            background: F.card,
+            border: `1px solid ${F.border}`,
+            borderRadius: 8,
+            padding: "20px 24px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+                Income Tax Regime Preference
+              </h2>
+              <p style={{ margin: "3px 0 0", fontSize: 12, color: F.text2 }}>
+                Effective from 1 April 2026. Your selection applies for TDS withholding across FY 2026-27.
+              </p>
+            </div>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: F.success,
+                background: F.successBg,
+                padding: "3px 10px",
+                borderRadius: 12,
+                height: 22,
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+            >
+              Active: {regime === "new" ? "New Regime" : "Old Regime"}
+            </span>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            {/* New Tax Regime Option */}
+            <div
+              onClick={() => setRegime("new")}
+              style={{
+                border: `2px solid ${regime === "new" ? F.brand : F.border}`,
+                borderRadius: 8,
+                padding: "18px 20px",
+                cursor: "pointer",
+                background: regime === "new" ? F.infoBg : F.card,
+                transition: "all 0.15s ease",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <input
+                  type="radio"
+                  name="regime"
+                  checked={regime === "new"}
+                  onChange={() => setRegime("new")}
+                  style={{ accentColor: F.brand }}
+                />
+                <strong style={{ fontSize: 15, color: F.text1 }}>
+                  New Tax Regime (Sec 115BAC) &mdash; Recommended
+                </strong>
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 24, fontSize: 12, color: F.text2, lineHeight: 1.6 }}>
+                <li>Lower slab rates with Standard Deduction of ₹75,000</li>
+                <li>No requirement to submit 80C or HRA rent receipts</li>
+                <li>Simplified compliance with zero documentation overhead</li>
+              </ul>
+            </div>
+
+            {/* Old Tax Regime Option */}
+            <div
+              onClick={() => setRegime("old")}
+              style={{
+                border: `2px solid ${regime === "old" ? F.brand : F.border}`,
+                borderRadius: 8,
+                padding: "18px 20px",
+                cursor: "pointer",
+                background: regime === "old" ? F.infoBg : F.card,
+                transition: "all 0.15s ease",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <input
+                  type="radio"
+                  name="regime"
+                  checked={regime === "old"}
+                  onChange={() => setRegime("old")}
+                  style={{ accentColor: F.brand }}
+                />
+                <strong style={{ fontSize: 15, color: F.text1 }}>
+                  Old Tax Regime (Exemptions & Deductions)
+                </strong>
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 24, fontSize: 12, color: F.text2, lineHeight: 1.6 }}>
+                <li>Claim exemptions for HRA, LTA, and Standard Deduction</li>
+                <li>Deductions under Sec 80C (up to ₹1.5L), 80D, and Home Loan Interest</li>
+                <li>Requires submission of rent receipts & investment proofs</li>
+              </ul>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+            <Btn onClick={() => setConfirmModal(true)}>
+              Save Tax Regime Selection
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: Investment Declarations */}
+      {activeTab === "declarations" && (
+        <div
+          style={{
+            background: F.card,
+            border: `1px solid ${F.border}`,
+            borderRadius: 8,
+            overflow: "hidden",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+          }}
+        >
+          <div
+            style={{
+              padding: "16px 20px",
+              borderBottom: `1px solid ${F.border}`,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+                Section 80C & IT Deductions Declaration
+              </h2>
+              <div style={{ fontSize: 12, color: F.text2, marginTop: 2 }}>
+                Submit investment proofs to reduce TDS tax liability under Old Regime
+              </div>
+            </div>
+            <Btn small variant="secondary" onClick={() => toast("Declaration portal opened", "info")}>
+              + Add New Declaration
+            </Btn>
+          </div>
+
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr
+                style={{
+                  borderBottom: `1px solid ${F.border}`,
+                  background: F.pageBg,
+                  color: F.text2,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                }}
+              >
+                <th style={{ padding: "10px 18px", textAlign: "left" }}>IT Section</th>
+                <th style={{ padding: "10px 14px", textAlign: "left" }}>Investment Name</th>
+                <th style={{ padding: "10px 14px", textAlign: "right" }}>Declared Amount</th>
+                <th style={{ padding: "10px 18px", textAlign: "center" }}>Proof Verification</th>
+              </tr>
+            </thead>
+            <tbody>
+              {declarations.map((d) => (
+                <tr key={d.name} style={{ borderBottom: `1px solid ${F.border}60` }}>
+                  <td style={{ padding: "14px 18px", fontWeight: 700, color: F.brand }}>
+                    {d.section}
+                  </td>
+                  <td style={{ padding: "14px 14px", color: F.text1 }}>{d.name}</td>
+                  <td style={{ padding: "14px 14px", textAlign: "right", fontWeight: 700, color: F.text1 }}>
+                    {d.declared}
+                  </td>
+                  <td style={{ padding: "14px 18px", textAlign: "center" }}>
+                    <Badge
+                      label={d.status}
+                      color={d.status === "Verified" ? F.success : F.warning}
+                      bg={d.status === "Verified" ? F.successBg : F.warningBg}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* TAB 3: Statutory Deductions Summary */}
+      {activeTab === "deductions" && (
+        <div
+          style={{
+            background: F.card,
+            border: `1px solid ${F.border}`,
+            borderRadius: 8,
+            padding: "20px 24px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+          }}
+        >
+          <h2 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 800, color: F.text1 }}>
+            Latest Statutory Deductions Summary
+          </h2>
+          <p style={{ margin: "0 0 16px", fontSize: 12, color: F.text2 }}>
+            Withholding breakdown from your most recent completed payslip
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 16,
+            }}
+          >
+            <div
+              style={{
+                background: F.pageBg,
+                border: `1px solid ${F.border}`,
+                borderRadius: 8,
+                padding: "16px 18px",
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 700, color: F.text2, textTransform: "uppercase" }}>
+                Provident Fund (PF)
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: F.brand, marginTop: 4 }}>
+                {inr(latest?.pf ?? 7200)}
+              </div>
+              <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
+                12% of Basic Salary
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: F.pageBg,
+                border: `1px solid ${F.border}`,
+                borderRadius: 8,
+                padding: "16px 18px",
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 700, color: F.text2, textTransform: "uppercase" }}>
+                Income Tax (TDS)
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: F.warning, marginTop: 4 }}>
+                {inr(latest?.tds ?? 11000)}
+              </div>
+              <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
+                Monthly TDS Withholding
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: F.pageBg,
+                border: `1px solid ${F.border}`,
+                borderRadius: 8,
+                padding: "16px 18px",
+              }}
+            >
+              <div style={{ fontSize: 11, fontWeight: 700, color: F.text2, textTransform: "uppercase" }}>
+                Professional Tax (PT)
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: F.text1, marginTop: 4 }}>
+                {inr(latest?.profTax ?? 200)}
+              </div>
+              <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
+                State Statutory Levy
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Regime Confirmation Modal */}
+      {confirmModal && (
+        <Modal title="Confirm Tax Regime Selection" onClose={() => setConfirmModal(false)}>
+          <p style={{ color: F.text2, fontSize: 13, lineHeight: 1.5 }}>
+            You are selecting the{" "}
+            <strong style={{ color: F.brand }}>
+              {regime === "new" ? "New Tax Regime (Sec 115BAC)" : "Old Tax Regime"}
+            </strong>{" "}
+            for FY 2026-27. This selection will be used to calculate monthly TDS deductions on your payroll.
+          </p>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 10,
+              marginTop: 20,
+            }}
+          >
+            <Btn variant="secondary" onClick={() => setConfirmModal(false)}>
+              Cancel
+            </Btn>
+            <Btn
+              onClick={() => {
+                setConfirmModal(false)
+                toast("Tax regime selection updated successfully", "success")
+              }}
+            >
+              Confirm Selection
+            </Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+
+function LoginPage({ onLogin }: { onLogin: (persona: Persona) => void }) {
+  const [activeTab, setActiveTab] = useState<Persona>("org_admin")
+  const [email, setEmail] = useState("meena.iyer@naxrita.com")
+  const [password, setPassword] = useState("Password@2026")
+  const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(true)
+  const [isLoading, setIsLoading] = useState(false)
+  const [forgotModal, setForgotModal] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState("")
+  const [forgotSubmitted, setForgotSubmitted] = useState(false)
+  const toast = useToast()
+
+  const tabAccounts: Record<
+    Persona,
+    {
+      label: string
+      email: string
+      role: string
+    }
+  > = {
+    org_admin: {
+      label: "Organisation Admin",
+      email: "meena.iyer@naxrita.com",
+      role: "Organization Administrator",
+    },
+    product_admin: {
+      label: "Product Admin",
+      email: "admin@naxpayroll.io",
+      role: "Platform Administrator",
+    },
+    employee: {
+      label: "Employee Login",
+      email: "priya.nair@naxrita.in",
+      role: "Employee Self-Service",
+    },
+  }
+
+  const handleTabSelect = (tab: Persona) => {
+    setActiveTab(tab)
+    setEmail(tabAccounts[tab].email)
+    setPassword("Password@2026")
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email.trim()) {
+      toast("Please enter your email or username", "warning")
+      return
+    }
+    if (!password.trim()) {
+      toast("Please enter your password", "warning")
+      return
+    }
+
+    setIsLoading(true)
+    setTimeout(() => {
+      setIsLoading(false)
+      onLogin(activeTab)
+    }, 300)
+  }
+
+  return (
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#F5F6F7",
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        color: F.text1,
+        padding: "24px 16px",
+      }}
+    >
+      {/* Enterprise Login Card */}
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 440,
+          background: "#FFFFFF",
+          border: `1px solid ${F.border}`,
+          borderRadius: 8,
+          boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.03)",
+          padding: "36px 36px 32px",
+          boxSizing: "border-box",
+        }}
+      >
+        {/* Brand Header */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 42,
+              height: 42,
+              borderRadius: 8,
+              background: "linear-gradient(135deg, #0070F2 0%, #0054A6 100%)",
+              marginBottom: 12,
+              boxShadow: "0 2px 8px rgba(0, 112, 242, 0.35)",
+            }}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              <polyline points="10 8 13 11 16 8" />
+            </svg>
+          </div>
+          <h1
+            style={{
+              fontSize: 20,
+              fontWeight: 700,
+              color: F.text1,
+              margin: 0,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Sign in to Naxpayroll
+          </h1>
+          <p style={{ fontSize: 13, color: F.text2, margin: "5px 0 0 0" }}>
+            Select your portal to continue
+          </p>
+        </div>
+
+        {/* 3 Tabs: Organisation Admin, Product Admin, Employee Login */}
+        <div
+          style={{
+            display: "flex",
+            background: "#F1F3F5",
+            padding: 3,
+            borderRadius: 6,
+            marginBottom: 24,
+            gap: 3,
+          }}
+        >
+          {(
+            [
+              { id: "org_admin" as Persona, label: "Organisation Admin" },
+              { id: "product_admin" as Persona, label: "Product Admin" },
+              { id: "employee" as Persona, label: "Employee Login" },
+            ]
+          ).map((tab) => {
+            const active = activeTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleTabSelect(tab.id)}
+                style={{
+                  flex: 1,
+                  padding: "8px 6px",
+                  background: active ? "#FFFFFF" : "transparent",
+                  border: "none",
+                  borderRadius: 5,
+                  fontSize: 11.5,
+                  fontWeight: active ? 600 : 500,
+                  color: active ? F.brand : F.text2,
+                  boxShadow: active ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease",
+                  textAlign: "center",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Clean Login Form */}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {/* Email / Username */}
+          <div>
+            <label
+              style={{
+                display: "block",
+                fontSize: 12,
+                fontWeight: 600,
+                color: F.text1,
+                marginBottom: 6,
+              }}
+            >
+              Email or Username
+            </label>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                border: `1px solid ${F.border}`,
+                borderRadius: 5,
+                background: "#FFFFFF",
+                padding: "0 12px",
+                height: 40,
+                transition: "border-color 0.15s ease",
+              }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = F.brand)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = F.border)}
+            >
+              <input
+                type="text"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@company.com"
+                required
+                style={{
+                  flex: 1,
+                  border: "none",
+                  outline: "none",
+                  fontSize: 13,
+                  color: F.text1,
+                  background: "transparent",
+                }}
+              />
+              {email && (
+                <button
+                  type="button"
+                  onClick={() => setEmail("")}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: F.text3,
+                    fontSize: 15,
+                    padding: "0 2px",
+                  }}
+                  title="Clear"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Password */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <label
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: F.text1,
+                }}
+              >
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotEmail(email)
+                  setForgotModal(true)
+                  setForgotSubmitted(false)
+                }}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  color: F.brand,
+                  fontWeight: 500,
+                  padding: 0,
+                }}
+              >
+                Forgot password?
+              </button>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                border: `1px solid ${F.border}`,
+                borderRadius: 5,
+                background: "#FFFFFF",
+                padding: "0 12px",
+                height: 40,
+                transition: "border-color 0.15s ease",
+              }}
+              onFocus={(e) => (e.currentTarget.style.borderColor = F.brand)}
+              onBlur={(e) => (e.currentTarget.style.borderColor = F.border)}
+            >
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
+                required
+                style={{
+                  flex: 1,
+                  border: "none",
+                  outline: "none",
+                  fontSize: 13,
+                  color: F.text1,
+                  background: "transparent",
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                title={showPassword ? "Hide password" : "Show password"}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: F.text3,
+                  padding: "0 2px",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                {showPassword ? (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                ) : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Remember Me */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              id="rememberMeCheckbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              style={{
+                cursor: "pointer",
+                accentColor: F.brand,
+                width: 15,
+                height: 15,
+              }}
+            />
+            <label
+              htmlFor="rememberMeCheckbox"
+              style={{
+                fontSize: 12.5,
+                color: F.text2,
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+            >
+              Remember me
+            </label>
+          </div>
+
+          {/* Sign In Button */}
+          <button
+            type="submit"
+            disabled={isLoading}
+            style={{
+              height: 42,
+              background: F.brand,
+              color: "#FFFFFF",
+              border: "none",
+              borderRadius: 5,
+              fontSize: 13.5,
+              fontWeight: 600,
+              cursor: isLoading ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              boxShadow: "0 1px 3px rgba(0, 112, 242, 0.3)",
+              transition: "background 0.15s ease",
+              marginTop: 4,
+            }}
+            onMouseEnter={(e) => {
+              if (!isLoading) e.currentTarget.style.background = F.brandHover
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = F.brand
+            }}
+          >
+            {isLoading ? (
+              <span>Signing in...</span>
+            ) : (
+              <span>Sign In as {tabAccounts[activeTab].label}</span>
+            )}
+          </button>
+        </form>
+
+        {/* Subtle Pre-filled Notice */}
+        <div
+          style={{
+            marginTop: 22,
+            paddingTop: 16,
+            borderTop: `1px solid ${F.border}`,
+            textAlign: "center",
+            fontSize: 11.5,
+            color: F.text3,
+          }}
+        >
+          <span>Single Sign-On (SSO) active • Demo credentials pre-filled</span>
+        </div>
+      </div>
+
+      {/* Subtle Footer */}
+      <div
+        style={{
+          marginTop: 24,
+          fontSize: 12,
+          color: F.text3,
+          textAlign: "center",
+          display: "flex",
+          gap: 16,
+        }}
+      >
+        <span>© 2026 Naxpayroll Inc.</span>
+        <span>•</span>
+        <span style={{ cursor: "pointer", color: F.text2 }}>Privacy</span>
+        <span>•</span>
+        <span style={{ cursor: "pointer", color: F.text2 }}>Terms</span>
+        <span>•</span>
+        <span style={{ cursor: "pointer", color: F.text2 }}>Help</span>
+      </div>
+
+      {/* Forgot Password Modal */}
+      {forgotModal && (
+        <Modal title="Reset Password" onClose={() => setForgotModal(false)}>
+          {forgotSubmitted ? (
+            <div style={{ textAlign: "center", padding: "16px 0" }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: F.text1, margin: "0 0 8px" }}>
+                Reset Instructions Sent
+              </h3>
+              <p style={{ fontSize: 13, color: F.text2, margin: 0, lineHeight: 1.5 }}>
+                We've sent a password reset link to <strong style={{ color: F.brand }}>{forgotEmail}</strong>.
+              </p>
+              <div style={{ marginTop: 20 }}>
+                <Btn onClick={() => setForgotModal(false)}>Back to Sign In</Btn>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <p style={{ fontSize: 13, color: F.text2, margin: 0, lineHeight: 1.5 }}>
+                Enter your work email address and we'll send you a link to reset your password.
+              </p>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: F.text1, marginBottom: 5 }}>
+                  Work Email Address
+                </label>
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="name@company.com"
+                  style={{
+                    width: "100%",
+                    height: 38,
+                    border: `1px solid ${F.border}`,
+                    borderRadius: 4,
+                    padding: "0 10px",
+                    fontSize: 13,
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
+                <Btn variant="secondary" onClick={() => setForgotModal(false)}>
+                  Cancel
+                </Btn>
+                <Btn
+                  onClick={() => {
+                    if (!forgotEmail.trim()) {
+                      toast("Please enter your email", "warning")
+                      return
+                    }
+                    setForgotSubmitted(true)
+                    toast("Reset link sent", "success")
+                  }}
+                >
+                  Send Reset Link
+                </Btn>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+    </div>
+  )
+}
+
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [persona, setPersona] = useState<Persona>("org_admin")
   const [view, setView] = useState("dashboard")
   const [emps, setEmps] = useState<Employee[]>(INIT_EMPS)
@@ -12196,6 +17606,22 @@ export default function App() {
   }
   const curPayrunStatus = payruns.find((p) => p.period === "August 2026")
     ?.status
+
+  if (!isLoggedIn) {
+    return (
+      <ToastCtx.Provider value={showToast}>
+        <LoginPage
+          onLogin={(p) => {
+            setPersona(p)
+            setView("dashboard")
+            setIsLoggedIn(true)
+            showToast(`Welcome back, ${personaUser[p]}! Logged in as ${personaRole[p]}`, "success")
+          }}
+        />
+        <Toasts toasts={toasts} />
+      </ToastCtx.Provider>
+    )
+  }
 
   return (
     <ToastCtx.Provider value={showToast}>
@@ -12312,14 +17738,18 @@ export default function App() {
             </div>
           </div>
           <div style={{ flex: 1 }} />
+          <LiveClock />
           <NotificationBell showToast={showToast} />
           <ProfileMenu
             persona={persona}
-            switchPersona={switchPersona}
+            onProfile={() => setView("profile")}
             personaUser={personaUser}
             personaRole={personaRole}
             personaInit={personaInit}
             showToast={showToast}
+            onSignOut={() => {
+              setIsLoggedIn(false)
+            }}
           />
         </header>
 
@@ -12540,210 +17970,26 @@ export default function App() {
             {persona === "employee" && (
               <>
                 {view === "dashboard" && (
-                  <div>
-                    <PH
-                      title={`Welcome, ${myEmp.name.split(" ")[0]}`}
-                      sub="Your payroll summary - Naxrita Solutions"
-                    />
-                    <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-                      <Tile
-                        label="Gross Salary"
-                        value={inr(myEmp.grossSalary)}
-                        sub="Per month"
-                        accent={F.brand}
-                      />
-                      <Tile
-                        label="Net Pay (July)"
-                        value={inr(
-                          payruns[0].rows.find((r) => r.empId === myEmp.id)
-                            ?.netSalary ?? 0,
-                        )}
-                        sub="After deductions"
-                        accent={F.success}
-                      />
-                      <Tile
-                        label="LOP Days (Aug)"
-                        value="0"
-                        sub="No loss of pay"
-                        accent={F.success}
-                      />
-                      <Tile
-                        label="YTD Earnings"
-                        value={inr(myEmp.grossSalary * 5)}
-                        sub="April - August 2026"
-                        accent={F.warning}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 320px",
-                        gap: 16,
-                      }}
-                    >
-                      <div
-                        style={{
-                          background: F.card,
-                          border: `1px solid ${F.border}`,
-                          borderRadius: 4,
-                          padding: 20,
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 600,
-                            color: F.text1,
-                            marginBottom: 16,
-                          }}
-                        >
-                          My Payslips
-                        </div>
-                        {payruns
-                          .filter((p) => p.status === "Completed")
-                          .map((run) => {
-                            const row = run.rows.find(
-                              (r) => r.empId === myEmp.id,
-                            )!
-                            return (
-                              <div
-                                key={run.id}
-                                style={{
-                                  display: "flex",
-                                  justifyContent: "space-between",
-                                  alignItems: "center",
-                                  padding: "10px 0",
-                                  borderBottom: `1px solid ${F.border}`,
-                                }}
-                              >
-                                <div>
-                                  <div
-                                    style={{ fontSize: 13, fontWeight: 600 }}
-                                  >
-                                    {run.period}
-                                  </div>
-                                  <div style={{ fontSize: 11, color: F.text3 }}>
-                                    Gross: {inr(row.totalEarnings)} - Ded:{" "}
-                                    {inr(row.totalDeductions)}
-                                  </div>
-                                </div>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 10,
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      fontSize: 14,
-                                      fontWeight: 800,
-                                      color: F.success,
-                                    }}
-                                  >
-                                    {inr(row.netSalary)}
-                                  </span>
-                                  <Btn
-                                    small
-                                    variant="secondary"
-                                    onClick={() =>
-                                      showToast(
-                                        `${run.period} payslip downloaded`,
-                                        "success",
-                                      )
-                                    }
-                                  >
-                                    PDF
-                                  </Btn>
-                                </div>
-                              </div>
-                            )
-                          })}
-                      </div>
-                      <div
-                        style={{
-                          background: F.card,
-                          border: `1px solid ${F.border}`,
-                          borderRadius: 4,
-                          padding: 20,
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 600,
-                            color: F.text1,
-                            marginBottom: 14,
-                          }}
-                        >
-                          My Salary Breakdown
-                        </div>
-                        {(() => {
-                          const s = ss.find(
-                            (x) => x.name === myEmp.salaryStructure,
-                          )!
-                          if (!s) return null
-                          return ([
-                            ["Basic", s.basic],
-                            ["HRA", s.hra],
-                            ["Fixed Allowance", s.fixedAllowance],
-                            ["Special Allowance", s.specialAllowance],
-                          ] as [string, number][]).map(([l, v]) => (
-                            <div
-                              key={l}
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                padding: "7px 0",
-                                borderBottom: `1px solid ${F.border}`,
-                              }}
-                            >
-                              <span style={{ fontSize: 12, color: F.text2 }}>
-                                {l}
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: 700,
-                                  color: F.text1,
-                                }}
-                              >
-                                {inr(v)}
-                              </span>
-                            </div>
-                          ))
-                        })()}
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            padding: "9px 0",
-                            fontSize: 13,
-                            fontWeight: 800,
-                            color: F.success,
-                          }}
-                        >
-                          <span>Monthly Gross</span>
-                          <span>{inr(myEmp.grossSalary)}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <EmployeeDashboardView
+                    emp={myEmp}
+                    payruns={payruns}
+                    structures={ss}
+                    onNav={setView}
+                  />
                 )}
                 {view === "profile" && <MyProfileView emp={myEmp} />}
                 {view === "salary" && (
-                  <SalaryManagementView emps={emps} ss={ss} setSS={setSS} />
+                  <MySalaryView emp={myEmp} structures={ss} onNav={setView} />
                 )}
                 {view === "payruns" && (
-                  <PayRunsView
-                    emps={emps}
-                    ss={ss}
-                    payruns={payruns}
-                    setPayruns={setPayruns}
-                  />
+                  <PayrollHistoryView emp={myEmp} payruns={payruns} onNav={setView} />
                 )}
                 {view === "payslips" && (
-                  <PayslipsView emps={emps} payruns={payruns} myEmp={myEmp} />
+                  <EmployeePayslipsView emp={myEmp} payruns={payruns} />
+                )}
+                {view === "documents" && <DocumentsView />}
+                {view === "financial" && (
+                  <FinancialDataView emp={myEmp} payruns={payruns} />
                 )}
               </>
             )}
