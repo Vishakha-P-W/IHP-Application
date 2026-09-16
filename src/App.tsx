@@ -13235,7 +13235,7 @@ function PlatformAccessManagementView({
   ]
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="platform-access-view" style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
       <div
         style={{
           background: F.card,
@@ -13265,7 +13265,7 @@ function PlatformAccessManagementView({
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
         {[
           { l: "Active Organizations", v: `${activeOrgs}/${orgs.length}`, s: "Tenant workspaces online", c: F.success },
           { l: "Platform Admins", v: String(admins.length), s: `${lockedAdmins} locked account${lockedAdmins !== 1 ? "s" : ""}`, c: F.brand },
@@ -13291,7 +13291,15 @@ function PlatformAccessManagementView({
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "330px 1fr", gap: 14, alignItems: "start" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(250px, 330px) minmax(0, 1fr)",
+          gap: 14,
+          alignItems: "start",
+          minWidth: 0,
+        }}
+      >
         <div
           style={{
             background: F.card,
@@ -13340,7 +13348,7 @@ function PlatformAccessManagementView({
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
           {selectedOrg && (
             <div
               style={{
@@ -13400,7 +13408,7 @@ function PlatformAccessManagementView({
               </div>
 
               <div style={{ padding: 18 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 14 }}>
                   <IR label="Tenant ID" value={selectedOrg.id} />
                   <IR label="Currency" value={selectedOrg.currency} />
                   <IR label="Legal Entity" value={selectedOrg.legalName} />
@@ -23230,10 +23238,19 @@ export default function App() {
           />
         </header>
 
-        <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: sidebarOpen ? "220px minmax(0, 1fr)" : "56px minmax(0, 1fr)",
+            flex: 1,
+            minHeight: 0,
+            overflow: "hidden",
+            transition: "grid-template-columns 0.2s ease",
+          }}
+        >
           <nav
             style={{
-              width: sidebarOpen ? 220 : 56,
+              width: "100%",
               background: F.shell,
               display: "flex",
               flexDirection: "column",
@@ -23309,7 +23326,15 @@ export default function App() {
             <div style={{ flex: 1 }} />
           </nav>
 
-          <main style={{ flex: 1, overflowY: "auto", padding: "22px 26px" }}>
+          <main
+            style={{
+              flex: "1 1 0",
+              minWidth: 0,
+              overflow: "auto",
+              padding: "22px 26px",
+              containerType: "inline-size",
+            }}
+          >
             {view === "profile" ? (
               <UnifiedProfileView
                 persona={persona}
