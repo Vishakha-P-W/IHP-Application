@@ -12986,6 +12986,15 @@ function PlatformAccessManagementView({
 }) {
   const toast = useToast()
   const [selectedOrgId, setSelectedOrgId] = useState(orgs[0]?.id ?? "")
+  const [accessTab, setAccessTab] = useState<"tenant" | "admins" | "activity">("tenant")
+  const [orgSearchDraft, setOrgSearchDraft] = useState("")
+  const [orgStatusDraft, setOrgStatusDraft] = useState("All")
+  const [orgSortDraft, setOrgSortDraft] = useState("name-asc")
+  const [orgFilters, setOrgFilters] = useState({
+    search: "",
+    status: "All",
+    sort: "name-asc",
+  })
   const [searchDraft, setSearchDraft] = useState("")
   const [roleDraft, setRoleDraft] = useState("All")
   const [statusDraft, setStatusDraft] = useState("All")
@@ -13085,6 +13094,22 @@ function PlatformAccessManagementView({
     ? Math.round((admins.filter((a) => a.mfa).length / admins.length) * 100)
     : 0
   const exposedTenants = orgs.filter((org) => orgControls[org.id]?.apiAccess).length
+
+  const filteredOrgs = orgs
+    .filter((org) => {
+      if (!searchMatches(orgFilters.search, [org.name, org.legalName, org.code, org.id, org.admin])) {
+        return false
+      }
+      if (orgFilters.status !== "All" && org.status !== orgFilters.status) return false
+      return true
+    })
+    .sort((a, b) => {
+      const dir = orgFilters.sort.endsWith("-desc") ? -1 : 1
+      if (orgFilters.sort.startsWith("employees")) return (a.employees - b.employees) * dir
+      if (orgFilters.sort.startsWith("status")) return a.status.localeCompare(b.status) * dir
+      if (orgFilters.sort.startsWith("code")) return a.code.localeCompare(b.code) * dir
+      return a.name.localeCompare(b.name) * dir
+    })
 
   const filteredAdmins = admins
     .filter((admin) => {
@@ -13291,15 +13316,7 @@ function PlatformAccessManagementView({
         ))}
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(250px, 330px) minmax(0, 1fr)",
-          gap: 14,
-          alignItems: "start",
-          minWidth: 0,
-        }}
-      >
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
         <div
           style={{
             background: F.card,
@@ -13308,48 +13325,170 @@ function PlatformAccessManagementView({
             overflow: "hidden",
           }}
         >
-          <div style={{ padding: "14px 16px", borderBottom: `1px solid ${F.border}`, background: F.pageBg }}>
-            <div style={{ fontSize: 14, fontWeight: 900, color: F.text1 }}>Organizations</div>
-            <div style={{ marginTop: 2, fontSize: 12, color: F.text2 }}>Select a tenant to control access</div>
+          <div
+            style={{
+              padding: "14px 18px",
+              borderBottom: `1px solid ${F.border}`,
+              background: F.pageBg,
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 14,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: F.text1 }}>Organizations</div>
+              <div style={{ marginTop: 2, fontSize: 12, color: F.text2 }}>
+                Tenant directory with status, administrator, and workforce details.
+              </div>
+            </div>
+            {selectedOrg && (
+              <div style={{ fontSize: 12, color: F.text2 }}>
+                Selected: <strong style={{ color: F.text1 }}>{selectedOrg.name}</strong>
+              </div>
+            )}
           </div>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {orgs.map((org) => {
-              const selected = org.id === selectedOrg?.id
-              return (
-                <button
-                  key={org.id}
-                  onClick={() => setSelectedOrgId(org.id)}
-                  style={{
-                    border: "none",
-                    borderBottom: `1px solid ${F.border}`,
-                    background: selected ? F.infoBg : F.card,
-                    padding: "13px 15px",
-                    textAlign: "left",
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    display: "grid",
-                    gridTemplateColumns: "1fr auto",
-                    gap: 10,
-                    alignItems: "center",
-                  }}
-                >
-                  <span>
-                    <span style={{ display: "block", fontSize: 13, fontWeight: 900, color: selected ? F.brand : F.text1 }}>
-                      {org.name}
-                    </span>
-                    <span style={{ display: "block", marginTop: 3, fontSize: 11, color: F.text3 }}>
-                      {org.code} · {org.employees} employees
-                    </span>
-                  </span>
-                  {orgBadge(org.status)}
-                </button>
-              )
-            })}
+          <div
+            className="org-access-filter"
+            style={{
+              padding: "14px 18px",
+              borderBottom: `1px solid ${F.border}`,
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
+              gap: 16,
+              alignItems: "end",
+              background: F.card,
+            }}
+          >
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(260px, 1.4fr) minmax(145px, 0.7fr) minmax(170px, 0.8fr)",
+                gap: 10,
+                alignItems: "end",
+                minWidth: 0,
+              }}
+            >
+              <Fld label="Search Organizations">
+                <input
+                  value={orgSearchDraft}
+                  onChange={(e) => setOrgSearchDraft(e.target.value)}
+                  placeholder="Search organization, code, tenant ID..."
+                  style={iSt}
+                />
+              </Fld>
+              <Fld label="Status">
+                <select value={orgStatusDraft} onChange={(e) => setOrgStatusDraft(e.target.value)} style={iSt}>
+                  <option>All</option>
+                  <option>Active</option>
+                  <option>Draft</option>
+                  <option>Inactive</option>
+                  <option>Suspended</option>
+                </select>
+              </Fld>
+              <Fld label="Sort">
+                <select value={orgSortDraft} onChange={(e) => setOrgSortDraft(e.target.value)} style={iSt}>
+                  <option value="name-asc">Name A-Z</option>
+                  <option value="name-desc">Name Z-A</option>
+                  <option value="code-asc">Code A-Z</option>
+                  <option value="employees-desc">Most Employees</option>
+                  <option value="employees-asc">Fewest Employees</option>
+                  <option value="status-asc">Status A-Z</option>
+                </select>
+              </Fld>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "end", flexWrap: "wrap" }}>
+              <Btn onClick={() => setOrgFilters({ search: orgSearchDraft, status: orgStatusDraft, sort: orgSortDraft })}>
+                Go
+              </Btn>
+              <Btn
+                variant="secondary"
+                onClick={() => {
+                  setOrgSearchDraft("")
+                  setOrgStatusDraft("All")
+                  setOrgSortDraft("name-asc")
+                  setOrgFilters({ search: "", status: "All", sort: "name-asc" })
+                }}
+              >
+                Clear Filters
+              </Btn>
+            </div>
+          </div>
+          <div className="fiori-table-wrap" style={{ border: "none", borderRadius: 0 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
+              <thead>
+                <tr>
+                  <Th>Organization</Th>
+                  <Th>Tenant ID</Th>
+                  <Th>Code</Th>
+                  <Th>Admin</Th>
+                  <Th>Financial Year</Th>
+                  <Th right>Employees</Th>
+                  <Th>Status</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredOrgs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: 42, textAlign: "center", color: F.text3 }}>
+                      No organizations match the applied filters.
+                    </td>
+                  </tr>
+                ) : filteredOrgs.map((org) => {
+                  const selected = org.id === selectedOrg?.id
+                  return (
+                    <tr
+                      key={org.id}
+                      style={{
+                        borderBottom: `1px solid ${F.border}`,
+                        background: selected ? F.infoBg : F.card,
+                        boxShadow: selected ? `inset 3px 0 0 ${F.brand}` : undefined,
+                      }}
+                    >
+                      <Td style={{ whiteSpace: "normal", maxWidth: 340 }}>
+                        <div style={{ fontWeight: 900, color: selected ? F.brand : F.text1 }}>
+                          {org.name}
+                        </div>
+                        <div style={{ marginTop: 2, fontSize: 11, color: F.text3 }}>
+                          {org.legalName}
+                        </div>
+                      </Td>
+                      <Td mono>{org.id}</Td>
+                      <Td>{org.code}</Td>
+                      <Td>{org.admin}</Td>
+                      <Td>{org.financialYear}</Td>
+                      <Td right>{org.employees}</Td>
+                      <Td>{orgBadge(org.status)}</Td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-          {selectedOrg && (
+          <div
+            style={{
+              background: F.card,
+              border: `1px solid ${F.border}`,
+              borderRadius: 8,
+              padding: "14px 18px 0",
+            }}
+          >
+            <TabBar
+              tabs={[
+                { id: "tenant", label: "Tenant Access" },
+                { id: "admins", label: "Product Admins" },
+                { id: "activity", label: "Activity" },
+              ]}
+              active={accessTab}
+              onSelect={(id) => setAccessTab(id as typeof accessTab)}
+            />
+          </div>
+
+          {accessTab === "tenant" && selectedOrg && (
             <div
               style={{
                 background: F.card,
@@ -13407,60 +13546,86 @@ function PlatformAccessManagementView({
                 </div>
               </div>
 
-              <div style={{ padding: 18 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginBottom: 14 }}>
-                  <IR label="Tenant ID" value={selectedOrg.id} />
-                  <IR label="Currency" value={selectedOrg.currency} />
-                  <IR label="Legal Entity" value={selectedOrg.legalName} />
+              <div style={{ padding: 18, display: "grid", gap: 14 }}>
+                <div className="fiori-table-wrap" style={{ borderRadius: 6 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+                    <thead>
+                      <tr>
+                        <Th>Tenant ID</Th>
+                        <Th>Currency</Th>
+                        <Th>Country</Th>
+                        <Th>Financial Year</Th>
+                        <Th>Legal Entity</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr style={{ borderBottom: `1px solid ${F.border}` }}>
+                        <Td mono>{selectedOrg.id}</Td>
+                        <Td>{selectedOrg.currency}</Td>
+                        <Td>{selectedOrg.country}</Td>
+                        <Td>{selectedOrg.financialYear}</Td>
+                        <Td style={{ maxWidth: 340 }}>{selectedOrg.legalName}</Td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: 10 }}>
-                  {controlItems.map((item) => {
-                    const enabled = Boolean(selectedControls[item.key])
-                    return (
-                      <button
-                        key={item.key}
-                        onClick={() => toggleOrgControl(item.key)}
-                        style={{
-                          border: `1px solid ${enabled ? item.accent : F.border}`,
-                          borderLeft: `4px solid ${enabled ? item.accent : F.border}`,
-                          background: enabled ? `${item.accent}10` : F.card,
-                          borderRadius: 8,
-                          padding: "12px 13px",
-                          textAlign: "left",
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
-                      >
-                        <span style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-                          <strong style={{ color: F.text1, fontSize: 13 }}>{item.label}</strong>
-                          <span
-                            style={{
-                              minWidth: 42,
-                              textAlign: "center",
-                              fontSize: 11,
-                              fontWeight: 900,
-                              color: enabled ? F.success : F.text3,
-                              background: enabled ? F.successBg : F.pageBg,
-                              border: `1px solid ${enabled ? "#BFE8CD" : F.border}`,
-                              borderRadius: 12,
-                              padding: "2px 8px",
-                            }}
-                          >
-                            {enabled ? "ON" : "OFF"}
-                          </span>
-                        </span>
-                        <span style={{ display: "block", marginTop: 7, fontSize: 12, color: F.text2, lineHeight: 1.35 }}>
-                          {item.desc}
-                        </span>
-                      </button>
-                    )
-                  })}
+
+                <div className="fiori-table-wrap" style={{ borderRadius: 6 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 980 }}>
+                    <thead>
+                      <tr>
+                        <Th>Permission</Th>
+                        <Th>Description</Th>
+                        <Th>Status</Th>
+                        <Th right>Action</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {controlItems.map((item) => {
+                        const enabled = Boolean(selectedControls[item.key])
+                        return (
+                          <tr key={item.key} style={{ borderBottom: `1px solid ${F.border}` }}>
+                            <Td>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <span
+                                  style={{
+                                    width: 4,
+                                    height: 28,
+                                    borderRadius: 4,
+                                    background: enabled ? item.accent : F.border,
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                <strong>{item.label}</strong>
+                              </div>
+                            </Td>
+                            <Td style={{ whiteSpace: "normal", maxWidth: 520, color: F.text2, lineHeight: 1.35 }}>
+                              {item.desc}
+                            </Td>
+                            <Td>
+                              <Badge
+                                label={enabled ? "ON" : "OFF"}
+                                color={enabled ? F.success : F.text3}
+                                bg={enabled ? F.successBg : F.pageBg}
+                              />
+                            </Td>
+                            <Td right>
+                              <Btn small variant={enabled ? "secondary" : "success"} onClick={() => toggleOrgControl(item.key)}>
+                                {enabled ? "Turn Off" : "Turn On"}
+                              </Btn>
+                            </Td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
           )}
 
-          <div
+          {accessTab === "admins" && (
+            <div
             style={{
               background: F.card,
               border: `1px solid ${F.border}`,
@@ -13469,6 +13634,7 @@ function PlatformAccessManagementView({
             }}
           >
             <div
+              className="admin-access-filter"
               style={{
                 padding: "14px 18px",
                 borderBottom: `1px solid ${F.border}`,
@@ -13602,8 +13768,10 @@ function PlatformAccessManagementView({
               </tbody>
             </table>
           </div>
+          )}
 
-          <div
+          {accessTab === "activity" && (
+            <div
             style={{
               background: F.card,
               border: `1px solid ${F.border}`,
@@ -13633,6 +13801,7 @@ function PlatformAccessManagementView({
               ))}
             </div>
           </div>
+          )}
         </div>
       </div>
 
