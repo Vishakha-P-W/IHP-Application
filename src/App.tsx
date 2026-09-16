@@ -41,11 +41,11 @@ const useToast = () => useContext(ToastCtx)
 function getTimeGreeting() {
   const hour = new Date().getHours()
   if (hour >= 4 && hour < 12) {
-    return { text: "Good morning", icon: "" }
+    return { text: "Good morning" }
   } else if (hour >= 12 && hour < 17) {
-    return { text: "Good afternoon", icon: "" }
+    return { text: "Good afternoon" }
   } else {
-    return { text: "Good evening", icon: "" }
+    return { text: "Good evening" }
   }
 }
 
@@ -220,7 +220,7 @@ function AdminWorkspaceHero({
 type Persona = "org_admin" | "product_admin" | "employee"
 type EmpStatus = "Active" | "Inactive" | "On Leave" | "Incomplete"
 type OrgStatus = "Active" | "Draft" | "Inactive" | "Suspended"
-type PayrunStatus = "Draft" | "Calculated" | "Under Review" | "Approved" | "Completed"
+type PayrunStatus = "Draft" | "Calculated" | "Under Review" | "Approved" | "Completed" | "Locked"
 
 interface Employee {
   id: string
@@ -270,6 +270,9 @@ interface Payrun {
   month: number
   year: number
   status: PayrunStatus
+  scope?: "All Employees" | "Specific Employees" | "Department Batch"
+  employeeIds?: string[]
+  note?: string
   totalEmployees: number
   grossPayroll: number
   totalDeductions: number
@@ -548,83 +551,91 @@ function calcRows(
   bonus: Record<string, number> = {},
   lop: Record<string, number> = {},
 ): PayrunInputRow[] {
-  return emps.map((e) => {
-    const s = ss.find((x) => x.name === e.salaryStructure)!
-    const lopDays = lop[e.id] ?? 0
-    const lopDeduction = Math.round((e.grossSalary / 26) * lopDays)
-    const bonusAmt = bonus[e.id] ?? 0
-    const pf = Math.round(s.basic * 0.12)
-    const esi = e.grossSalary <= 21000 ? Math.round(e.grossSalary * 0.0075) : 0
-    const tds = Math.round(e.grossSalary * 0.1)
-    const profTax = e.grossSalary > 15000 ? 200 : 150
-    const totalEarnings = e.grossSalary + bonusAmt - lopDeduction
-    const totalDeductions = pf + esi + tds + profTax
-    return {
-      empId: e.id,
-      empName: e.name,
-      department: e.department,
-      grossSalary: e.grossSalary,
-      bonus: bonusAmt,
-      incentive: 0,
-      lopDays,
-      lopDeduction,
-      otherDeduction: 0,
-      pf,
-      esi,
-      tds,
-      profTax,
-      totalEarnings,
-      totalDeductions,
-      netSalary: totalEarnings - totalDeductions,
-    }
-  })
+  return emps
+    .filter((e) => e.status !== "Inactive" && e.status !== "Incomplete" && e.grossSalary > 0)
+    .map((e) => {
+      const s = ss.find((x) => x.name === e.salaryStructure)
+      const basic = s?.basic ?? Math.round(e.grossSalary * 0.4)
+      const lopDays = lop[e.id] ?? 0
+      const lopDeduction = Math.round((e.grossSalary / 26) * lopDays)
+      const bonusAmt = bonus[e.id] ?? 0
+      const pf = Math.round(basic * 0.12)
+      const esi = e.grossSalary <= 21000 ? Math.round(e.grossSalary * 0.0075) : 0
+      const tds = Math.round(e.grossSalary * 0.1)
+      const profTax = e.grossSalary > 15000 ? 200 : 150
+      const totalEarnings = e.grossSalary + bonusAmt - lopDeduction
+      const totalDeductions = pf + esi + tds + profTax
+      return {
+        empId: e.id,
+        empName: e.name,
+        department: e.department,
+        grossSalary: e.grossSalary,
+        bonus: bonusAmt,
+        incentive: 0,
+        lopDays,
+        lopDeduction,
+        otherDeduction: 0,
+        pf,
+        esi,
+        tds,
+        profTax,
+        totalEarnings,
+        totalDeductions,
+        netSalary: totalEarnings - totalDeductions,
+      }
+    })
+}
+
+function createPayrun(
+  input: Omit<Payrun, "totalEmployees" | "grossPayroll" | "totalDeductions" | "netPayroll">,
+): Payrun {
+  const grossPayroll = input.rows.reduce((sum, row) => sum + row.totalEarnings, 0)
+  const totalDeductions = input.rows.reduce((sum, row) => sum + row.totalDeductions, 0)
+  return {
+    ...input,
+    totalEmployees: input.rows.length,
+    grossPayroll,
+    totalDeductions,
+    netPayroll: grossPayroll - totalDeductions,
+  }
 }
 
 const INIT_PAYRUNS: Payrun[] = [
-  {
+  createPayrun({
     id: "PR-2026-07",
     period: "July 2026",
     month: 7,
     year: 2026,
     status: "Completed",
-    totalEmployees: 9,
-    grossPayroll: 1065000,
-    totalDeductions: 148500,
-    netPayroll: 916500,
+    scope: "All Employees",
     generatedBy: "Meena Iyer",
     generatedOn: "2026-07-28",
     rows: calcRows(INIT_EMPS, INIT_SS, { "EMP-001": 10000, "EMP-005": 15000 }, {
       "EMP-006": 2,
     }),
-  },
-  {
+  }),
+  createPayrun({
     id: "PR-2026-08",
     period: "August 2026",
     month: 8,
     year: 2026,
     status: "Under Review",
-    totalEmployees: 9,
-    grossPayroll: 1070000,
-    totalDeductions: 149200,
-    netPayroll: 920800,
+    scope: "All Employees",
     generatedBy: "Meena Iyer",
     generatedOn: "2026-08-28",
     rows: calcRows(INIT_EMPS, INIT_SS, { "EMP-003": 5000 }, { "EMP-006": 1 }),
-  },
-  {
+  }),
+  createPayrun({
     id: "PR-2026-06",
     period: "June 2026",
     month: 6,
     year: 2026,
     status: "Completed",
-    totalEmployees: 8,
-    grossPayroll: 955000,
-    totalDeductions: 133700,
-    netPayroll: 821300,
+    scope: "All Employees",
     generatedBy: "Meena Iyer",
     generatedOn: "2026-06-27",
     rows: calcRows(INIT_EMPS, INIT_SS),
-  },
+  }),
 ]
 
 const INIT_ORGS: Organization[] = [
@@ -874,7 +885,10 @@ const PAYRUN_STEPS: PayrunStatus[] = [
   "Under Review",
   "Approved",
   "Completed",
+  "Locked",
 ]
+const isFinalizedPayrun = (status: PayrunStatus) =>
+  status === "Completed" || status === "Locked"
 
 function Badge({
   label,
@@ -900,6 +914,10 @@ function Badge({
         color,
         background: bg,
         whiteSpace: "nowrap",
+        maxWidth: 200,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        flexShrink: 0,
       }}
     >
       {dot && (
@@ -934,6 +952,7 @@ function prBadge(s: PayrunStatus) {
     "Under Review": [F.warning, F.warningBg, F.warning],
     Approved: ["#0854A0", "#D6E8FB", "#0854A0"],
     Completed: [F.success, F.successBg, F.success],
+    Locked: [F.text1, "#E8EEF5", F.text1],
   }
   const [c, b, d] = m[s]
   return <Badge label={s} color={c} bg={b} dot={d} />
@@ -972,10 +991,12 @@ function Tile({
       style={{
         background: F.card,
         border: `1px solid ${F.border}`,
-        borderRadius: 4,
+        borderRadius: 8,
         padding: "18px 22px",
         borderLeft: accent ? `3px solid ${accent}` : undefined,
         flex: 1,
+        minWidth: 0,
+        overflow: "hidden",
       }}
     >
       <div
@@ -986,17 +1007,35 @@ function Tile({
           textTransform: "uppercase",
           letterSpacing: "0.06em",
           marginBottom: 8,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
         }}
       >
         {label}
       </div>
       <div
-        style={{ fontSize: 24, fontWeight: 800, color: F.text1, lineHeight: 1 }}
+        style={{
+          fontSize: 24,
+          fontWeight: 800,
+          color: F.text1,
+          lineHeight: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
       >
         {value}
       </div>
       {sub && (
-        <div style={{ fontSize: 12, color: F.text2, marginTop: 6 }}>{sub}</div>
+        <div style={{
+          fontSize: 12,
+          color: F.text2,
+          marginTop: 6,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}>{sub}</div>
       )}
     </div>
   )
@@ -1035,16 +1074,19 @@ function Th({
   return (
     <th
       style={{
-        padding: "9px 14px",
+        padding: "10px 14px",
         textAlign: right ? "right" : "left",
         fontSize: 11,
         fontWeight: 600,
         color: F.text2,
         textTransform: "uppercase",
         letterSpacing: "0.06em",
-        borderBottom: `1px solid ${F.border}`,
+        borderBottom: `2px solid ${F.border}`,
         whiteSpace: "nowrap",
         background: F.pageBg,
+        position: "sticky",
+        top: 0,
+        zIndex: 2,
       }}
     >
       {children}
@@ -1071,6 +1113,10 @@ function Td({
         color: F.text1,
         verticalAlign: "middle",
         fontFamily: mono ? "'JetBrains Mono',monospace" : undefined,
+        maxWidth: 220,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
         ...style,
       }}
     >
@@ -1580,7 +1626,7 @@ function SlidePanel({
             X
           </button>
         </div>
-        <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: 20, wordBreak: "break-word" }}>
           {children}
         </div>
         {footer && (
@@ -1623,16 +1669,18 @@ function Modal({
         onClick={(e) => e.stopPropagation()}
         style={{
           background: F.card,
-          borderRadius: 4,
-          width: wide ? 740 : 580,
+          borderRadius: 8,
+          width: wide ? 820 : 580,
+          maxWidth: "calc(100vw - 32px)",
           maxHeight: "92vh",
           overflow: "auto",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.22)",
+          boxShadow: "0 18px 46px rgba(15,23,42,0.28)",
+          border: `1px solid ${F.border}`,
         }}
       >
         <div
           style={{
-            padding: "14px 22px",
+            padding: "18px 24px",
             borderBottom: `1px solid ${F.border}`,
             display: "flex",
             justifyContent: "space-between",
@@ -1643,7 +1691,7 @@ function Modal({
             zIndex: 1,
           }}
         >
-          <span style={{ fontSize: 15, fontWeight: 700, color: F.text1 }}>
+          <span style={{ fontSize: 18, fontWeight: 900, color: F.text1 }}>
             {title}
           </span>
           <button
@@ -1661,7 +1709,7 @@ function Modal({
             X
           </button>
         </div>
-        <div style={{ padding: 22 }}>{children}</div>
+        <div style={{ padding: 22, wordBreak: "break-word" }}>{children}</div>
       </div>
     </div>
   )
@@ -1670,7 +1718,7 @@ function Modal({
 function Stepper({ current }: { current: PayrunStatus }) {
   const ci = PAYRUN_STEPS.indexOf(current)
   return (
-    <div style={{ display: "flex", alignItems: "center", marginBottom: 24 }}>
+    <div style={{ display: "flex", alignItems: "center", marginBottom: 20, width: "100%", overflowX: "auto" }}>
       {PAYRUN_STEPS.map((step, i) => {
         const done = i < ci
         const active = i === ci
@@ -1681,6 +1729,7 @@ function Stepper({ current }: { current: PayrunStatus }) {
               display: "flex",
               alignItems: "center",
               flex: i < PAYRUN_STEPS.length - 1 ? 1 : undefined,
+              minWidth: 0,
             }}
           >
             <div
@@ -1688,26 +1737,51 @@ function Stepper({ current }: { current: PayrunStatus }) {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                gap: 6,
+                gap: 5,
+                flexShrink: 0,
               }}
             >
               <div
                 style={{
-                  width: 28,
-                  height: 28,
+                  width: 26,
+                  height: 26,
                   borderRadius: "50%",
-                  background: done ? F.success : active ? F.brand : F.border,
+                  background: done
+                    ? F.success
+                    : active
+                      ? F.brand
+                      : F.pageBg,
+                  border: `2px solid ${
+                    done
+                      ? F.success
+                      : active
+                        ? F.brand
+                        : F.borderStrong
+                  }`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
+                  boxShadow: active ? `0 0 0 3px ${F.brand}25` : "none",
+                  transition: "all 0.2s ease",
                 }}
               >
                 {done ? (
-                  <span style={{ color: "#fff", fontSize: 13 }}>v</span>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#FFFFFF"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
                 ) : (
                   <span
                     style={{
-                      color: active ? "#fff" : F.text3,
+                      color: active ? "#FFFFFF" : F.text2,
                       fontSize: 11,
                       fontWeight: 700,
                     }}
@@ -1722,6 +1796,7 @@ function Stepper({ current }: { current: PayrunStatus }) {
                   color: active ? F.brand : done ? F.success : F.text3,
                   fontWeight: active ? 700 : 500,
                   whiteSpace: "nowrap",
+                  textAlign: "center",
                 }}
               >
                 {step}
@@ -1733,8 +1808,9 @@ function Stepper({ current }: { current: PayrunStatus }) {
                   flex: 1,
                   height: 2,
                   background: done ? F.success : F.border,
-                  margin: "0 6px",
-                  marginBottom: 18,
+                  margin: "0 4px",
+                  marginBottom: 16,
+                  minWidth: 12,
                 }}
               />
             )}
@@ -2130,25 +2206,28 @@ function TrendArrow({ up }: { up: boolean }) {
     <span
       style={{
         color: up ? F.success : F.error,
-        fontSize: 11,
-        fontWeight: 700,
         display: "inline-flex",
         alignItems: "center",
-        gap: 2,
+        justifyContent: "center",
+        width: 14,
+        height: 14,
+        borderRadius: "50%",
+        background: up ? `${F.success}18` : `${F.error}18`,
+        flexShrink: 0,
       }}
     >
       <svg
-        width="10"
-        height="10"
+        width="9"
+        height="9"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth="2.5"
+        strokeWidth="3"
         strokeLinecap="round"
+        strokeLinejoin="round"
       >
         <polyline points={up ? "18 15 12 9 6 15" : "6 9 12 15 18 9"} />
       </svg>
-      {up ? "+" : "−"}
     </span>
   )
 }
@@ -2158,11 +2237,11 @@ function TrendArrow({ up }: { up: boolean }) {
 // Proper ring donut with center label
 function RingChart({
   segments,
-  size = 140,
+  size = 130,
   centerLabel,
   centerSub,
 }: {
-  segments: { label: string value: number color: string }[]
+  segments: { label: string; value: number; color: string }[]
   size?: number
   centerLabel?: string
   centerSub?: string
@@ -2175,22 +2254,24 @@ function RingChart({
           width: size,
           height: size,
           borderRadius: "50%",
-          background: F.border,
+          background: F.pageBg,
+          border: `1px dashed ${F.border}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: 12,
+          fontSize: 11,
           color: F.text3,
+          flexShrink: 0,
         }}
       >
         No data
       </div>
     )
   const R = size / 2,
-    r = R * 0.58,
+    r = R * 0.60,
     cx = R,
     cy = R
-  const GAP = 0.012 // radians gap between segments
+  const GAP = 0.015 // radians gap between segments
   let cum = 0
   const paths = segments.map((seg) => {
     const pct = seg.value / total
@@ -2198,17 +2279,17 @@ function RingChart({
     cum += pct
     const end = cum * Math.PI * 2 - Math.PI / 2
     const s = start * Math.PI * 2 - Math.PI / 2
-    const x1 = cx + (R - 3) * Math.cos(s)
-    const y1 = cy + (R - 3) * Math.sin(s)
-    const x2 = cx + (R - 3) * Math.cos(end)
-    const y2 = cy + (R - 3) * Math.sin(end)
+    const x1 = cx + (R - 2) * Math.cos(s)
+    const y1 = cy + (R - 2) * Math.sin(s)
+    const x2 = cx + (R - 2) * Math.cos(end)
+    const y2 = cy + (R - 2) * Math.sin(end)
     const x3 = cx + r * Math.cos(end)
     const y3 = cy + r * Math.sin(end)
     const x4 = cx + r * Math.cos(s)
     const y4 = cy + r * Math.sin(s)
     const large = pct > 0.5 ? 1 : 0
     return {
-      d: `M ${x1} ${y1} A ${R - 3} ${R - 3} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${r} ${r} 0 ${large} 0 ${x4} ${y4} Z`,
+      d: `M ${x1} ${y1} A ${R - 2} ${R - 2} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${r} ${r} 0 ${large} 0 ${x4} ${y4} Z`,
       color: seg.color,
       label: seg.label,
       pct: Math.round(pct * 100),
@@ -2219,10 +2300,10 @@ function RingChart({
       width={size}
       height={size}
       viewBox={`0 0 ${size} ${size}`}
-      style={{ flexShrink: 0 }}
+      style={{ flexShrink: 0, display: "block" }}
     >
       {paths.map((p, i) => (
-        <path key={i} d={p.d} fill={p.color} opacity={0.92}>
+        <path key={i} d={p.d} fill={p.color} opacity={0.94}>
           <title>
             {p.label}: {p.pct}%
           </title>
@@ -2232,12 +2313,12 @@ function RingChart({
         <>
           <text
             x={cx}
-            y={cy - 4}
+            y={cy - 2}
             textAnchor="middle"
             fontSize="14"
             fontWeight="800"
             fill={F.text1}
-            fontFamily="Inter,sans-serif"
+            fontFamily="Inter, sans-serif"
           >
             {centerLabel}
           </text>
@@ -2247,8 +2328,9 @@ function RingChart({
               y={cy + 13}
               textAnchor="middle"
               fontSize="9"
+              fontWeight="600"
               fill={F.text3}
-              fontFamily="Inter,sans-serif"
+              fontFamily="Inter, sans-serif"
             >
               {centerSub}
             </text>
@@ -2260,10 +2342,10 @@ function RingChart({
 }
 
 // Multi-series grouped bar chart (SVG)
-function GroupedBarChart({ months, cur }: { months: Payrun[] cur: Payrun }) {
+function GroupedBarChart({ months, cur }: { months: Payrun[]; cur: Payrun }) {
   const W = 560,
     H = 180,
-    PAD = { l: 54, r: 16, t: 20, b: 48 }
+    PAD = { l: 56, r: 16, t: 20, b: 46 }
   const chartW = W - PAD.l - PAD.r,
     chartH = H - PAD.t - PAD.b
   const maxVal =
@@ -2275,8 +2357,8 @@ function GroupedBarChart({ months, cur }: { months: Payrun[] cur: Payrun }) {
   const yTicks = Array.from({ length: ticks + 1 }, (_, i) => i / ticks)
 
   const barGroupW = chartW / months.length
-  const barW = barGroupW * 0.3
-  const gap = barGroupW * 0.06
+  const barW = barGroupW * 0.28
+  const gap = barGroupW * 0.05
 
   const yPos = (v: number) => PAD.t + chartH * (1 - v / maxVal)
 
@@ -2288,7 +2370,7 @@ function GroupedBarChart({ months, cur }: { months: Payrun[] cur: Payrun }) {
         : String(v)
 
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block" }}>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block", minHeight: 160 }}>
       {/* Grid lines */}
       {yTicks.map((t, i) => {
         const y = PAD.t + chartH * (1 - t)
@@ -2304,12 +2386,12 @@ function GroupedBarChart({ months, cur }: { months: Payrun[] cur: Payrun }) {
               strokeWidth={t === 0 ? 1.5 : 0.8}
             />
             <text
-              x={PAD.l - 6}
-              y={y + 4}
+              x={PAD.l - 8}
+              y={y + 3.5}
               textAnchor="end"
               fontSize="9"
               fill={F.text3}
-              fontFamily="Inter,sans-serif"
+              fontFamily="Inter, sans-serif"
             >
               {fmtK(maxVal * t)}
             </text>
@@ -2319,25 +2401,35 @@ function GroupedBarChart({ months, cur }: { months: Payrun[] cur: Payrun }) {
 
       {/* Bars */}
       {months.map((p, i) => {
-        const gx = PAD.l + i * barGroupW + barGroupW * 0.1
+        const gx = PAD.l + i * barGroupW + barGroupW * 0.12
         const isCur = p.id === cur.id
-        const gh = Math.max(2, chartH * (p.grossPayroll / maxVal))
-        const nh = Math.max(2, chartH * (p.netPayroll / maxVal))
-        const dh = Math.max(2, chartH * (p.totalDeductions / maxVal))
+        const gh = Math.max(3, chartH * (p.grossPayroll / maxVal))
+        const nh = Math.max(3, chartH * (p.netPayroll / maxVal))
+        const dh = Math.max(3, chartH * (p.totalDeductions / maxVal))
         const gy = yPos(p.grossPayroll)
         const ny = yPos(p.netPayroll)
         const dy = yPos(p.totalDeductions)
-        const cx = gx + barGroupW * 0.4
+        const cx = gx + barGroupW * 0.38
         return (
           <g key={p.id}>
+            {isCur && (
+              <rect
+                x={gx - 4}
+                y={PAD.t}
+                width={barGroupW * 0.82}
+                height={chartH}
+                rx={4}
+                fill={`${F.brand}0A`}
+              />
+            )}
             {/* Gross bar */}
             <rect
               x={gx}
               y={gy}
               width={barW}
               height={gh}
-              rx={2}
-              fill={isCur ? F.warning : `${F.warning}55`}
+              rx={3}
+              fill={isCur ? F.warning : `${F.warning}60`}
             >
               <title>
                 {p.period} Gross: {inr(p.grossPayroll)}
@@ -2349,8 +2441,8 @@ function GroupedBarChart({ months, cur }: { months: Payrun[] cur: Payrun }) {
               y={ny}
               width={barW}
               height={nh}
-              rx={2}
-              fill={isCur ? F.success : `${F.success}55`}
+              rx={3}
+              fill={isCur ? F.success : `${F.success}60`}
             >
               <title>
                 {p.period} Net: {inr(p.netPayroll)}
@@ -2362,8 +2454,8 @@ function GroupedBarChart({ months, cur }: { months: Payrun[] cur: Payrun }) {
               y={dy}
               width={barW}
               height={dh}
-              rx={2}
-              fill={isCur ? F.error : `${F.error}44`}
+              rx={3}
+              fill={isCur ? F.error : `${F.error}50`}
             >
               <title>
                 {p.period} Deductions: {inr(p.totalDeductions)}
@@ -2377,7 +2469,7 @@ function GroupedBarChart({ months, cur }: { months: Payrun[] cur: Payrun }) {
               fontSize="10"
               fill={isCur ? F.brand : F.text2}
               fontWeight={isCur ? "700" : "500"}
-              fontFamily="Inter,sans-serif"
+              fontFamily="Inter, sans-serif"
             >
               {p.period.slice(0, 3)}
             </text>
@@ -2387,20 +2479,10 @@ function GroupedBarChart({ months, cur }: { months: Payrun[] cur: Payrun }) {
               textAnchor="middle"
               fontSize="9"
               fill={F.text3}
-              fontFamily="Inter,sans-serif"
+              fontFamily="Inter, sans-serif"
             >
               {"'" + p.year.toString().slice(2)}
             </text>
-            {isCur && (
-              <rect
-                x={gx - 2}
-                y={PAD.t}
-                width={barGroupW * 0.8}
-                height={chartH}
-                rx={3}
-                fill={`${F.brand}06`}
-              />
-            )}
           </g>
         )
       })}
@@ -2408,30 +2490,29 @@ function GroupedBarChart({ months, cur }: { months: Payrun[] cur: Payrun }) {
       {/* Net payroll trend line */}
       {(() => {
         const pts = months.map((p, i) => {
-          const gx = PAD.l + i * barGroupW + barGroupW * 0.1 + barW + gap / 2
-          return [gx, yPos(p.netPayroll) - 4]
+          const gx = PAD.l + i * barGroupW + barGroupW * 0.12 + barW + gap + barW / 2
+          return [gx, yPos(p.netPayroll)]
         })
         if (pts.length < 2) return null
-        const d = "M " + pts.map((p) => p.join(" ")).join(" L ")
         return (
           <>
             <polyline
               points={pts.map((p) => p.join(",")).join(" ")}
               fill="none"
               stroke={F.brand}
-              strokeWidth="1.5"
-              strokeDasharray="5 3"
-              opacity="0.5"
+              strokeWidth="1.8"
+              strokeDasharray="4 3"
+              opacity="0.8"
             />
             {pts.map(([x, y], i) => (
               <circle
                 key={i}
                 cx={x}
                 cy={y}
-                r="3"
-                fill={months[i].id === cur.id ? F.brand : F.card}
+                r="3.5"
+                fill={months[i].id === cur.id ? F.brand : "#FFFFFF"}
                 stroke={F.brand}
-                strokeWidth="1.5"
+                strokeWidth="2"
               />
             ))}
           </>
@@ -2452,25 +2533,26 @@ function Sparkline({
   up: boolean
 }) {
   if (data.length < 2) return null
-  const W = 60,
+  const W = 64,
     H = 24
   const min = Math.min(...data),
     max = Math.max(...data),
-    range = max - min || 1
-  const pts = data.map((v, i) => [
-    (i / (data.length - 1)) * W,
-    H - ((v - min) / range) * (H - 4) - 2,
-  ])
+    diff = max - min
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * W
+    const y = diff === 0 ? H / 2 : H - ((v - min) / diff) * (H - 8) - 4
+    return [x, y]
+  })
   const d = "M " + pts.map((p) => p.join(" ")).join(" L ")
   const area = `M ${pts[0][0]} ${H} L ${pts.map((p) => p.join(" ")).join(" L ")} L ${pts[pts.length - 1][0]} ${H} Z`
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-      <path d={area} fill={`${color}18`} />
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ flexShrink: 0, display: "block" }}>
+      <path d={area} fill={`${color}15`} />
       <path
         d={d}
         fill="none"
         stroke={color}
-        strokeWidth="1.6"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -2526,6 +2608,39 @@ function DashboardView({
   const totalTDS = cur.rows.reduce((s, r) => s + r.tds, 0)
   const totalPT = cur.rows.reduce((s, r) => s + r.profTax, 0)
   const totalESI = cur.rows.reduce((s, r) => s + r.esi, 0)
+  const avgNetPerEmployee =
+    cur.totalEmployees > 0 ? Math.round(cur.netPayroll / cur.totalEmployees) : 0
+  const deductionRate =
+    cur.grossPayroll > 0 ? Math.round((totalDed / cur.grossPayroll) * 1000) / 10 : 0
+  const payrollReadiness = isFinalizedPayrun(cur.status)
+    ? 100
+    : cur.status === "Approved"
+      ? 86
+      : cur.status === "Under Review"
+        ? 72
+        : cur.status === "Calculated"
+          ? 58
+          : 35
+  const verifiedCoverage =
+    emps.length > 0 ? Math.round((activeCount / emps.length) * 100) : 0
+  const incompleteCount = emps.filter((e) => e.status === "Incomplete").length
+  const inactiveCount = emps.filter((e) => e.status === "Inactive").length
+  const payrollVariance = prev
+    ? cur.netPayroll - prev.netPayroll
+    : 0
+  const ytdGross = months.reduce((sum, run) => sum + run.grossPayroll, 0)
+  const ytdNet = months.reduce((sum, run) => sum + run.netPayroll, 0)
+  const ytdDeductions = months.reduce((sum, run) => sum + run.totalDeductions, 0)
+  const finalizedRuns = months.filter((run) => isFinalizedPayrun(run.status)).length
+  const avgDeductionRate =
+    ytdGross > 0 ? Math.round((ytdDeductions / ytdGross) * 1000) / 10 : 0
+  const complianceScore = Math.max(
+    82,
+    Math.min(100, payrollReadiness - incompleteCount * 3 + finalizedRuns * 2),
+  )
+  const exceptionCount =
+    incompleteCount +
+    cur.rows.filter((row) => row.lopDays > 0 || row.netSalary <= 0).length
 
   const empTypeSegs = [
     {
@@ -2620,1330 +2735,601 @@ function DashboardView({
       .length,
   }))
 
-  // Sparkline data (net payroll across periods)
-  const sparkNets = months.map((m) => m.netPayroll)
-  const sparkEmps = months.map((m) => m.totalEmployees)
-
-  // Department payroll share
-  const deptRows = depts
-    .map((d, i) => {
-      const net = cur.rows
-        .filter((r) => r.department === d)
-        .reduce((s, r) => s + r.netSalary, 0)
-      const count = cur.rows.filter((r) => r.department === d).length
-      const pct = Math.round((net / cur.netPayroll) * 100)
-      return { d, net, count, pct, color: DEPT_COLORS[i % DEPT_COLORS.length] }
-    })
-    .sort((a, b) => b.net - a.net)
+  // Financial year scope
+  const now = new Date()
+  const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1
 
   // Time-based greeting calculation
   const { text: greeting, icon: greetingIcon } = getTimeGreeting()
-  const adminName = "Meena Iyer"
+  const todayFormatted = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })
 
-  const CardIcon = ({
-    color,
-    children,
-  }: {
-    color: string
-    children: React.ReactNode
-  }) => (
-    <div
-      style={{
-        width: 38,
-        height: 38,
-        borderRadius: 10,
-        background: `${color}15`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-      }}
-    >
-      {children}
-    </div>
-  )
+  const cardStyle: React.CSSProperties = {
+    background: F.card,
+    border: `1px solid ${F.border}`,
+    borderRadius: 8,
+    padding: "20px 22px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+  }
+
+  // Trend dataset across payruns (matches DualBarTrendChart format)
+  const trendData = months.map((run) => ({
+    period: run.period,
+    gross: run.grossPayroll,
+    deductions: run.totalDeductions,
+    net: run.netPayroll,
+    status: run.status,
+  }))
+
+  // Donut chart segments for current pay run breakdown (matches AnalyticsDonutChart format)
+  const donutSegments = [
+    { label: "Take-Home Net", value: cur.netPayroll, color: F.success },
+    { label: "Income Tax (TDS)", value: totalTDS, color: F.warning },
+    { label: "Provident Fund", value: totalPF, color: F.brand },
+    { label: "Professional Tax", value: totalPT, color: "#8B5CF6" },
+    ...(totalESI > 0 ? [{ label: "ESI Contribution", value: totalESI, color: "#00ACC1" }] : []),
+  ].filter((s) => s.value > 0)
+
+  const takeHomeRatio = cur.grossPayroll > 0 ? Math.round((cur.netPayroll / cur.grossPayroll) * 100) : 83
+
+  const deptRows = depts.map((d, i) => {
+    const deptEmps = emps.filter((e) => e.department === d)
+    const dRows = cur.rows.filter((r) => r.department === d)
+    const net = dRows.reduce((s, r) => s + r.netSalary, 0)
+    const pct = cur.netPayroll > 0 ? Math.round((net / cur.netPayroll) * 100) : 0
+    return {
+      d,
+      count: deptEmps.length,
+      net,
+      pct,
+      color: DEPT_COLORS[i % DEPT_COLORS.length],
+    }
+  })
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* ── Time-wise Greeting Header ── */}
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* ── Top Header Profile & Status Banner ── */}
       <div
         style={{
           background: F.card,
           border: `1px solid ${F.border}`,
-          borderRadius: 10,
-          padding: "18px 24px",
+          borderRadius: 8,
+          padding: "20px 24px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+          gap: 20,
+          flexWrap: "wrap",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
         }}
       >
-        <div>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <div
+            style={{
+              width: 58,
+              height: 58,
+              borderRadius: "50%",
+              background: `linear-gradient(135deg, ${F.brand}, #0854A0)`,
+              color: "#FFFFFF",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 20,
+              fontWeight: 800,
+              boxShadow: "0 2px 8px rgba(0,112,242,0.25)",
+              flexShrink: 0,
+            }}
+          >
+            MI
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: F.text2,
+                }}
+              >
+                ORGANIZATION WORKSPACE
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: F.brand,
+                  background: F.infoBg,
+                  padding: "2px 10px",
+                  borderRadius: 12,
+                }}
+              >
+                {todayFormatted}
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 18 }}>{greetingIcon}</span>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: 24,
+                  fontWeight: 800,
+                  color: F.text1,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {greeting}, <span style={{ fontWeight: 800 }}>Meena</span>
+              </h1>
+              <Badge
+                label="Active"
+                color={F.success}
+                bg={F.successBg}
+                dot={F.success}
+              />
+              <Badge
+                label={`${complianceScore}% Compliance`}
+                color={complianceScore >= 95 ? F.success : F.warning}
+                bg={complianceScore >= 95 ? F.successBg : F.warningBg}
+              />
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 13,
+                color: F.text2,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <span>Organization Administrator</span>
+              <span>&bull;</span>
+              <span>Naxrita Solutions Pvt. Ltd.</span>
+              <span>&bull;</span>
+              <span>Mumbai HQ</span>
+              <span>&bull;</span>
+              <span style={{ color: F.text3 }}>ID: ORG-ADM-01</span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <div
+            style={{
+              textAlign: "right",
+              paddingRight: 12,
+              borderRight: `1px solid ${F.border}`,
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, color: F.text3 }}>
+              FINANCIAL YEAR
+            </div>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: F.text1,
+                marginTop: 2,
+              }}
+            >
+              FY {fyStartYear}&ndash;{(fyStartYear + 1).toString().slice(2)}
+            </div>
+          </div>
+          <Btn
+            onClick={() => onNav("payruns")}
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 8,
-              marginBottom: 4,
+              gap: 6,
+              fontWeight: 700,
             }}
           >
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 22,
-                fontWeight: 800,
-                color: F.text1,
-                letterSpacing: "-0.3px",
-              }}
-            >
-              {greeting}, {adminName}
-            </h1>
-          </div>
-          <p style={{ margin: 0, fontSize: 13, color: F.text2 }}>
-            Naxrita Solutions Pvt. Ltd. · {cur.period} ·{" "}
-            {new Date().toLocaleDateString("en-IN", {
-              weekday: "short",
-              day: "2-digit",
-              month: "long",
-              year: "numeric",
-            })}
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Btn
-            variant="secondary"
-            onClick={() => toast("Dashboard exported", "success")}
-          >
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Export
-          </Btn>
-          <Btn onClick={() => onNav("payruns")}>
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polygon points="5 3 19 12 5 21 5 3" />
-            </svg>
-            Run Payroll
+            <span>Run Payroll</span>
+            <span style={{ fontSize: 14 }}>&rarr;</span>
           </Btn>
         </div>
       </div>
 
-      {/* ── Section Divider Label ── */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginTop: 2,
-          marginBottom: -4,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            color: F.text1,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase",
-          }}
-        >
-          Payroll & Workforce Analytics
-        </div>
-        <div style={{ fontSize: 12, color: F.text3 }}>
-          Real-time metrics for {cur.period}
-        </div>
-      </div>
-
-      {/* ── Row 1: 5 KPI tiles ── */}
+      {/* ── KPI Metric Summary Cards Grid (4 Columns) ── */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(5,1fr)",
-          gap: 12,
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 16,
         }}
       >
-        {([
-          {
-            label: "Total Employees",
-            value: String(emps.length),
-            sub: `${activeCount} active · ${onLeave} on leave`,
-            up: true,
-            accent: F.brand,
-            spark: sparkEmps,
-            icon: (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke={F.brand}
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            ),
-          },
-          {
-            label: "Gross Payroll",
-            value: inr(cur.grossPayroll),
-            sub: `${
-              grossChange >= 0 ? "+" : ""
-            }${grossChange.toFixed(1)}% vs ${prev?.period.slice(0, 3) ?? "prev"}`,
-            up: grossChange >= 0,
-            accent: F.warning,
-            spark: months.map((m) => m.grossPayroll),
-            icon: (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke={F.warning}
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="12" y1="1" x2="12" y2="23" />
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
-            ),
-          },
-          {
-            label: "Net Payroll",
-            value: inr(cur.netPayroll),
-            sub: `${
-              netChange >= 0 ? "+" : ""
-            }${netChange.toFixed(1)}% vs ${prev?.period.slice(0, 3) ?? "prev"}`,
-            up: netChange >= 0,
-            accent: F.success,
-            spark: sparkNets,
-            icon: (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke={F.success}
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
-                <polyline points="16 7 22 7 22 13" />
-              </svg>
-            ),
-          },
-          {
-            label: "Total Deductions",
-            value: inr(totalDed),
-            sub: `PF ${inr(totalPF)} · TDS ${inr(totalTDS)}`,
-            up: false,
-            accent: "#8A5CF6",
-            spark: months.map((m) => m.totalDeductions),
-            icon: (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#8A5CF6"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-            ),
-          },
-          {
-            label: "Payroll Health",
-            value: "98.2%",
-            sub: "Compliance score · Aug",
-            up: true,
-            accent: F.success,
-            spark: [94, 96, 97, 97, 98, 98, 98],
-            icon: (
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke={F.success}
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                <polyline points="22 4 12 14.01 9 11.01" />
-              </svg>
-            ),
-          },
-        ] as {
-          label: string
-          value: string
-          sub: string
-          up: boolean
-          accent: string
-          spark: number[]
-          icon: React.ReactNode
-        }[]).map((k) => (
-          <div
-            key={k.label}
-            style={{
-              background: F.card,
-              border: `1px solid ${F.border}`,
-              borderRadius: 10,
-              padding: "18px 20px",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                marginBottom: 12,
-              }}
-            >
-              <CardIcon color={k.accent}>{k.icon}</CardIcon>
-              <Sparkline data={k.spark} color={k.accent} up={k.up} />
-            </div>
-            <div
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                color: F.text3,
-                textTransform: "uppercase",
-                letterSpacing: "0.07em",
-                marginBottom: 6,
-              }}
-            >
-              {k.label}
-            </div>
-            <div
-              style={{
-                fontSize: 20,
-                fontWeight: 800,
-                color: F.text1,
-                letterSpacing: "-0.5px",
-                marginBottom: 6,
-              }}
-            >
-              {k.value}
-            </div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                fontSize: 11,
-              }}
-            >
-              <TrendArrow up={k.up} />
-              <span style={{ color: F.text3 }}>{k.sub}</span>
-            </div>
-          </div>
-        ))}
+        <EmployeeMetricCard
+          label="TOTAL EMPLOYEES"
+          value={String(emps.length)}
+          sub={`${activeCount} active · ${onLeave} on leave · ${inactiveCount} inactive`}
+          accent={F.brand}
+          badgeText="Workforce"
+          badgeBg={F.infoBg}
+          badgeColor={F.brand}
+          progress={100}
+          onClick={() => onNav("employees")}
+        />
+        <EmployeeMetricCard
+          label="GROSS PAYROLL"
+          value={inr(cur.grossPayroll)}
+          sub={`${grossChange >= 0 ? "+" : ""}${grossChange.toFixed(1)}% vs ${prev?.period.slice(0, 3) ?? "prev"}`}
+          accent={F.warning}
+          badgeText={grossChange >= 0 ? "Growth" : "Variance"}
+          badgeBg={F.warningBg}
+          badgeColor={F.warning}
+          progress={84}
+          onClick={() => onNav("payruns")}
+        />
+        <EmployeeMetricCard
+          label="NET DISBURSAL"
+          value={inr(cur.netPayroll)}
+          sub={`${takeHomeRatio}% net realization across org`}
+          accent={F.success}
+          badgeText="Take-Home"
+          badgeBg={F.successBg}
+          badgeColor={F.success}
+          progress={takeHomeRatio}
+          onClick={() => onNav("payruns")}
+        />
+        <EmployeeMetricCard
+          label="TOTAL DEDUCTIONS"
+          value={inr(totalDed)}
+          sub={`PF ${inr(totalPF)} · TDS ${inr(totalTDS)}`}
+          accent="#8A5CF6"
+          badgeText={`${deductionRate}% Ratio`}
+          badgeBg="#F3E8FF"
+          badgeColor="#8A5CF6"
+          progress={Math.min(100, Math.round(deductionRate * 4))}
+          onClick={() => onNav("salary")}
+        />
       </div>
 
-      {/* ── Row 2: Multi-series bar chart + Current pay run ── */}
+      {/* ── Main Analytics Section: Dual Bar Trend + Donut Breakdown ── */}
       <div
-        style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 14 }}
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.45fr) minmax(320px, 0.95fr)",
+          gap: 20,
+        }}
       >
-        {/* Grouped bar chart */}
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 10,
-            padding: "22px 24px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              marginBottom: 20,
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: F.text1 }}>
-                Payroll Trend
-              </div>
-              <div style={{ fontSize: 12, color: F.text3, marginTop: 2 }}>
-                Gross · Net · Deductions across {months.length} pay cycles
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-              {[
-                { l: "Gross", c: F.warning },
-                { l: "Net", c: F.success },
-                { l: "Deductions", c: F.error },
-                { l: "Net Trend", c: F.brand, dash: true },
-              ].map((x) => (
-                <div
-                  key={x.l}
-                  style={{ display: "flex", alignItems: "center", gap: 5 }}
-                >
-                  <svg width="18" height="6">
-                    <rect
-                      x="0"
-                      y="1"
-                      width="18"
-                      height="4"
-                      rx="2"
-                      fill={x.dash ? "none" : x.c}
-                      stroke={x.dash ? x.c : "none"}
-                      strokeWidth={x.dash ? 1.5 : 0}
-                      strokeDasharray={x.dash ? "5 3" : "none"}
-                    />
-                  </svg>
-                  <span style={{ fontSize: 11, color: F.text2 }}>{x.l}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <GroupedBarChart months={months} cur={cur} />
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-around",
-              marginTop: 14,
-              paddingTop: 12,
-              borderTop: `1px solid ${F.border}`,
-            }}
-          >
-            {[
-              {
-                l: "Avg Net",
-                v: inr(
-                  Math.round(
-                    months.reduce((s, m) => s + m.netPayroll, 0) /
-                      months.length,
-                  ),
-                ),
-              },
-              {
-                l: "Peak Month",
-                v:
-                  months
-                    .reduce((a, b) => (a.netPayroll > b.netPayroll ? a : b))
-                    .period.slice(0, 3) +
-                  " '" +
-                  months
-                    .reduce((a, b) => (a.netPayroll > b.netPayroll ? a : b))
-                    .year.toString()
-                    .slice(2),
-              },
-              {
-                l: "YTD Gross",
-                v: inr(months.reduce((s, m) => s + m.grossPayroll, 0)),
-              },
-            ].map((x) => (
-              <div key={x.l} style={{ textAlign: "center" }}>
-                <div
-                  style={{
-                    fontSize: 10,
-                    color: F.text3,
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    marginBottom: 4,
-                  }}
-                >
-                  {x.l}
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: F.text1 }}>
-                  {x.v}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Current pay run status card */}
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 10,
-            padding: "20px 22px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: F.text1 }}>
-                Current Pay Run
-              </div>
-              <div style={{ fontSize: 12, color: F.text3, marginTop: 2 }}>
-                {cur.period}
-              </div>
-            </div>
-            {prBadge(cur.status)}
-          </div>
-          <Stepper current={cur.status} />
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {([
-              ["Gross Payroll", cur.grossPayroll, F.warning],
-              ["Total Deductions", cur.totalDeductions, F.error],
-              ["Net Payroll", cur.netPayroll, F.success],
-            ] as [string, number, string][]).map(([l, v, c]) => (
-              <div
-                key={l}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "8px 12px",
-                  background: F.pageBg,
-                  borderRadius: 6,
-                  borderLeft: `3px solid ${c}`,
-                }}
-              >
-                <span style={{ fontSize: 12, color: F.text2 }}>{l}</span>
-                <span style={{ fontSize: 13, fontWeight: 800, color: F.text1 }}>
-                  {inr(v)}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div
-            style={{
-              padding: "10px 0",
-              borderTop: `1px solid ${F.border}`,
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 12,
-              color: F.text3,
-            }}
-          >
-            <span>Generated by</span>
-            <span style={{ fontWeight: 600, color: F.text1 }}>
-              {cur.generatedBy}
-            </span>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={() => onNav("payruns")}>Review</Btn>
-            <Btn
-              variant="secondary"
-              onClick={() => toast("Pay run exported", "success")}
-            >
-              Export
-            </Btn>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Row 3: Dept breakdown + Two ring charts ── */}
-      <div
-        style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}
-      >
-        {/* Department payroll heat bars */}
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 10,
-            padding: "20px 22px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: F.text1,
-              marginBottom: 3,
-            }}
-          >
-            Payroll by Department
-          </div>
-          <div style={{ fontSize: 12, color: F.text3, marginBottom: 16 }}>
-            Net pay share · {cur.period}
-          </div>
-          {deptRows.map((x) => (
-            <div key={x.d} style={{ marginBottom: 12 }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: 4,
-                  alignItems: "center",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 2,
-                      background: x.color,
-                      display: "inline-block",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span
-                    style={{ fontSize: 12, fontWeight: 500, color: F.text1 }}
-                  >
-                    {x.d}
-                  </span>
-                </div>
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <span style={{ fontSize: 11, color: F.text3 }}>
-                    {x.count} emp
-                  </span>
-                  <span
-                    style={{ fontSize: 12, fontWeight: 700, color: F.text1 }}
-                  >
-                    {x.pct}%
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: x.color,
-                      width: 76,
-                      textAlign: "right",
-                    }}
-                  >
-                    {inr(x.net)}
-                  </span>
-                </div>
-              </div>
-              <div
-                style={{
-                  height: 6,
-                  borderRadius: 3,
-                  background: F.border,
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    width: `${x.pct}%`,
-                    height: "100%",
-                    borderRadius: 3,
-                    background: `linear-gradient(90deg,${x.color}99,${x.color})`,
-                    transition: "width 0.5s ease",
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Deduction breakdown ring */}
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 10,
-            padding: "20px 22px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: F.text1,
-              marginBottom: 3,
-            }}
-          >
-            Deduction Split
-          </div>
-          <div style={{ fontSize: 12, color: F.text3, marginBottom: 16 }}>
-            Total: {inr(totalDed)} · {cur.period}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <RingChart
-              segments={[
-                { label: "PF", value: totalPF, color: "#8A5CF6" },
-                { label: "TDS", value: totalTDS, color: F.error },
-                { label: "Prof Tax", value: totalPT, color: F.warning },
-                { label: "ESI", value: totalESI, color: F.brand },
-              ].filter((x) => x.value > 0)}
-              size={120}
-              centerLabel={inr(totalDed).replace("₹", "")}
-              centerSub="Total"
-            />
-            <div style={{ flex: 1 }}>
-              {[
-                { l: "Prov. Fund", v: totalPF, c: "#8A5CF6" },
-                { l: "Income Tax", v: totalTDS, c: F.error },
-                { l: "Prof. Tax", v: totalPT, c: F.warning },
-                { l: "ESI", v: totalESI, c: F.brand },
-              ].map(({ l, v, c }) => {
-                const pct = totalDed > 0 ? Math.round((v / totalDed) * 100) : 0
-                return (
-                  <div key={l} style={{ marginBottom: 8 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        marginBottom: 3,
-                      }}
-                    >
-                      <span
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 5,
-                          fontSize: 11,
-                          color: F.text2,
-                        }}
-                      >
-                        <span
-                          style={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: 2,
-                            background: c,
-                            display: "inline-block",
-                          }}
-                        />
-                        {l}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: F.text1,
-                        }}
-                      >
-                        {inr(v)}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        height: 4,
-                        borderRadius: 2,
-                        background: F.border,
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: `${pct}%`,
-                          height: "100%",
-                          borderRadius: 2,
-                          background: c,
-                          opacity: 0.8,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Workforce composition ring */}
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 10,
-            padding: "20px 22px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: F.text1,
-              marginBottom: 3,
-            }}
-          >
-            Workforce Composition
-          </div>
-          <div style={{ fontSize: 12, color: F.text3, marginBottom: 16 }}>
-            {emps.length} employees total
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <RingChart
-              segments={empTypeSegs}
-              size={120}
-              centerLabel={String(emps.length)}
-              centerSub="Employees"
-            />
-            <div
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-              }}
-            >
-              {[
-                ...empTypeSegs,
-                ...statusSegs.filter((s) => s.label !== "Active"),
-              ].map((x) => (
-                <div
-                  key={x.label}
-                  style={{ display: "flex", alignItems: "center", gap: 8 }}
-                >
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 2,
-                      background: x.color,
-                      display: "inline-block",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span style={{ fontSize: 11, color: F.text2, flex: 1 }}>
-                    {x.label}
-                  </span>
-                  <span
-                    style={{ fontSize: 13, fontWeight: 800, color: F.text1 }}
-                  >
-                    {x.value}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: F.text3,
-                      width: 26,
-                      textAlign: "right",
-                    }}
-                  >
-                    {Math.round((x.value / emps.length) * 100)}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Row 4: Activity feed + Salary distribution + Compliance ── */}
-      <div
-        style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}
-      >
-        {/* Payroll Activity Feed */}
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 10,
-            padding: "20px 22px",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
+        {/* Left Card: Monthly Trend Bar Graph */}
+        <section style={cardStyle}>
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               alignItems: "flex-start",
               marginBottom: 16,
+              gap: 12,
             }}
           >
             <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: F.text1 }}>
-                Activity &amp; Alerts
-              </div>
-              <div style={{ fontSize: 12, color: F.text3, marginTop: 2 }}>
-                Recent payroll events
-              </div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: F.text1,
+                }}
+              >
+                Earnings & Net Pay Trend
+              </h2>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: 12,
+                  color: F.text2,
+                }}
+              >
+                Monthly Gross salary vs Net Take-Home disbursement over recent pay cycles
+              </p>
             </div>
-            <span
-              style={{
-                padding: "2px 10px",
-                background: F.warningBg,
-                border: `1px solid ${F.warning}40`,
-                borderRadius: 10,
-                fontSize: 11,
-                fontWeight: 700,
-                color: F.warning,
-              }}
-            >
-              1 Pending
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: F.text3,
+                  fontWeight: 600,
+                  background: F.pageBg,
+                  padding: "3px 8px",
+                  borderRadius: 4,
+                }}
+              >
+                Last 12 Months
+              </div>
+              <Btn small variant="ghost" onClick={() => onNav("payruns")}>
+                View Payruns &rarr;
+              </Btn>
+            </div>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", flex: 1 }}>
-            {activityFeed.map((a, i) => {
-              const iconSvg: Record<string, React.ReactNode> = {
-                payroll: (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect x="2" y="3" width="20" height="14" rx="2" />
-                    <line x1="8" y1="21" x2="16" y2="21" />
-                    <line x1="12" y1="17" x2="12" y2="21" />
-                  </svg>
-                ),
-                approve: (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M9 11l3 3L22 4" />
-                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                  </svg>
-                ),
-                employee: (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                ),
-                tax: (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                  </svg>
-                ),
-                pf: (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                  </svg>
-                ),
-                warning: (
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                ),
-              }
-              return (
-                <div
-                  key={i}
-                  style={{
-                    display: "flex",
-                    gap: 12,
-                    paddingBottom: i < activityFeed.length - 1 ? 12 : 0,
-                    marginBottom: i < activityFeed.length - 1 ? 12 : 0,
-                    borderBottom:
-                      i < activityFeed.length - 1
-                        ? `1px solid ${F.border}`
-                        : "none",
-                  }}
-                >
-                  {/* Timeline dot + line */}
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 26,
-                        height: 26,
-                        borderRadius: "50%",
-                        background: `${a.color}15`,
-                        border: `1.5px solid ${a.color}40`,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        color: a.color,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {iconSvg[a.icon]}
-                    </div>
-                    {i < activityFeed.length - 1 && (
-                      <div
-                        style={{
-                          width: 1,
-                          flex: 1,
-                          background: F.border,
-                          marginTop: 4,
-                        }}
-                      />
-                    )}
-                  </div>
-                  {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        gap: 6,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: F.text1,
-                          lineHeight: 1.3,
-                        }}
-                      >
-                        {a.label}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 10,
-                          color: F.text3,
-                          whiteSpace: "nowrap",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {a.time}
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: F.text3,
-                        marginTop: 2,
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      {a.detail}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+          <DualBarTrendChart data={trendData} />
+        </section>
 
-        {/* Salary distribution */}
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 10,
-            padding: "20px 22px",
-          }}
-        >
+        {/* Right Card: Donut / Pie Chart Breakdown */}
+        <section style={cardStyle}>
           <div
             style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: F.text1,
-              marginBottom: 3,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: 14,
             }}
           >
-            Salary Distribution
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: F.text1,
+                }}
+              >
+                Period Breakdown
+              </h2>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: 12,
+                  color: F.text2,
+                }}
+              >
+                {cur.period} organization salary composition
+              </p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: F.brand,
+                  background: F.infoBg,
+                  padding: "2px 8px",
+                  borderRadius: 4,
+                }}
+              >
+                {cur.period}
+              </span>
+              <Btn small variant="ghost" onClick={() => onNav("reports")}>
+                View Reports &rarr;
+              </Btn>
+            </div>
           </div>
-          <div style={{ fontSize: 12, color: F.text3, marginBottom: 16 }}>
-            Headcount by gross salary band
+          <AnalyticsDonutChart segments={donutSegments} />
+        </section>
+      </div>
+
+      {/* ── Lower Section: Current Pay Run Status + Department Payroll Ledger ── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.4fr) minmax(320px, 1fr)",
+          gap: 20,
+        }}
+      >
+        {/* Left: Current Pay Run Lifecycle Card */}
+        <section style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: F.text1,
+                }}
+              >
+                Current Pay Run Lifecycle
+              </h2>
+              <p
+                style={{
+                  margin: "3px 0 0",
+                  fontSize: 12,
+                  color: F.text2,
+                }}
+              >
+                {cur.period} pay run process and disbursement status
+              </p>
+            </div>
+            <Btn small variant="secondary" onClick={() => onNav("payruns")}>
+              View All Payruns
+            </Btn>
           </div>
-          {(() => {
-            const maxCount = Math.max(...bandData.map((b) => b.count), 1)
-            const BCOLS = ["#8A5CF6", F.brand, F.warning, F.success]
-            return bandData.map((b, i) => (
-              <div key={b.label} style={{ marginBottom: 14 }}>
+
+          <Stepper current={cur.status} />
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
+            {[
+              ["Gross Payroll", cur.grossPayroll, F.warning, "Total organization salary expense"],
+              ["Total Deductions", cur.totalDeductions, F.error, "Statutory EPF, TDS & Tax liabilities"],
+              ["Net Payout", cur.netPayroll, F.success, "Direct employee bank transfers"],
+            ].map(([l, v, c, desc]) => (
+              <div
+                key={l as string}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "10px 14px",
+                  background: F.pageBg,
+                  borderRadius: 6,
+                  border: `1px solid ${F.border}`,
+                  borderLeft: `3px solid ${c as string}`,
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: F.text1 }}>
+                    {l as string}
+                  </div>
+                  <div style={{ fontSize: 11, color: F.text3, marginTop: 1 }}>{desc as string}</div>
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 800, color: F.text1 }}>
+                  {inr(v as number)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div
+            style={{
+              marginTop: 14,
+              paddingTop: 12,
+              borderTop: `1px solid ${F.border}`,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontSize: 12, color: F.text3 }}>
+              Prepared by <strong style={{ color: F.text1 }}>{cur.generatedBy}</strong> · Due 31 Aug 2026
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn small onClick={() => onNav("payruns")}>
+                Review Pay Run &rarr;
+              </Btn>
+              <Btn
+                small
+                variant="secondary"
+                onClick={() => toast("Pay run summary exported", "success")}
+              >
+                Export
+              </Btn>
+            </div>
+          </div>
+        </section>
+
+        {/* Right: Payroll by Department */}
+        <section style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: F.text1,
+                }}
+              >
+                Payroll by Department
+              </h2>
+              <p
+                style={{
+                  margin: "3px 0 0",
+                  fontSize: 12,
+                  color: F.text2,
+                }}
+              >
+                Departmental net pay allocation for {cur.period}
+              </p>
+            </div>
+            <Btn small variant="secondary" onClick={() => onNav("employees")}>
+              Manage Staff
+            </Btn>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {deptRows.map((x) => (
+              <div key={x.d}>
                 <div
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
-                    marginBottom: 5,
+                    marginBottom: 4,
+                    alignItems: "center",
                   }}
                 >
-                  <span
-                    style={{ fontSize: 12, color: F.text1, fontWeight: 500 }}
-                  >
-                    {b.label}
-                  </span>
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 6 }}
-                  >
-                    <span style={{ fontSize: 11, color: F.text3 }}>
-                      {b.count} emp
+                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 2,
+                        background: x.color,
+                        display: "inline-block",
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 600, color: F.text1 }}>
+                      {x.d}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: F.text3 }}>{x.count} emp</span>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: F.text1,
+                        background: F.pageBg,
+                        padding: "1px 6px",
+                        borderRadius: 4,
+                      }}
+                    >
+                      {x.pct}%
                     </span>
                     <span
                       style={{
                         fontSize: 12,
                         fontWeight: 700,
-                        color: BCOLS[i],
-                        width: 28,
+                        color: x.color,
+                        width: 76,
                         textAlign: "right",
                       }}
                     >
-                      {emps.length > 0
-                        ? Math.round((b.count / emps.length) * 100)
-                        : 0}
-                      %
+                      {inr(x.net)}
                     </span>
                   </div>
                 </div>
                 <div
                   style={{
-                    height: 22,
-                    borderRadius: 4,
-                    background: F.pageBg,
+                    height: 5,
+                    borderRadius: 3,
+                    background: F.border,
                     overflow: "hidden",
-                    display: "flex",
-                    alignItems: "center",
                   }}
                 >
                   <div
                     style={{
+                      width: `${x.pct}%`,
                       height: "100%",
-                      borderRadius: 4,
-                      background: `linear-gradient(90deg,${BCOLS[i]}55,${BCOLS[i]})`,
-                      width: `${Math.max((b.count / maxCount) * 100, b.count > 0 ? 8 : 0)}%`,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "flex-end",
-                      paddingRight: 6,
+                      borderRadius: 3,
+                      background: `linear-gradient(90deg, ${x.color}88, ${x.color})`,
                       transition: "width 0.4s ease",
                     }}
-                  >
-                    {b.count > 0 && (
-                      <span
-                        style={{ fontSize: 10, fontWeight: 700, color: "#fff" }}
-                      >
-                        {b.count}
-                      </span>
-                    )}
-                  </div>
+                  />
                 </div>
               </div>
-            ))
-          })()}
-        </div>
-
-        {/* Compliance & Statutory health */}
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 10,
-            padding: "20px 22px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: 14,
-              fontWeight: 700,
-              color: F.text1,
-              marginBottom: 3,
-            }}
-          >
-            Compliance Health
+            ))}
           </div>
-          <div style={{ fontSize: 12, color: F.text3, marginBottom: 16 }}>
-            Statutory filing status · {cur.period}
-          </div>
-          {([
-            { l: "PF Filed", v: inr(totalPF), ok: true, note: "Due: 15 Sep" },
-            {
-              l: "ESI Filed",
-              v: totalESI > 0 ? inr(totalESI) : "N/A (>₹21K avg)",
-              ok: true,
-              note: "All compliant",
-            },
-            {
-              l: "TDS Filed",
-              v: inr(totalTDS),
-              ok: true,
-              note: "Form 24Q pending",
-            },
-            {
-              l: "Prof Tax",
-              v: inr(totalPT),
-              ok: true,
-              note: "Challan generated",
-            },
-            {
-              l: "Payslips",
-              v: `${cur.totalEmployees} issued`,
-              ok: cur.status === "Completed",
-              note:
-                cur.status === "Completed"
-                  ? "All distributed"
-                  : "Pending approval",
-            },
-          ] as { l: string v: string ok: boolean note: string }[]).map((x) => (
-            <div
-              key={x.l}
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 10,
-                padding: "9px 0",
-                borderBottom: `1px solid ${F.border}`,
-              }}
-            >
-              <div
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: "50%",
-                  background: x.ok ? F.successBg : F.errorBg,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  marginTop: 1,
-                }}
-              >
-                {x.ok ? (
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke={F.success}
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ) : (
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke={F.error}
-                    strokeWidth="3"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                )}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div
-                  style={{ display: "flex", justifyContent: "space-between" }}
-                >
-                  <span
-                    style={{ fontSize: 12, fontWeight: 600, color: F.text1 }}
-                  >
-                    {x.l}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: x.ok ? F.success : F.error,
-                    }}
-                  >
-                    {x.v}
-                  </span>
-                </div>
-                <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
-                  {x.note}
-                </div>
-              </div>
-            </div>
-          ))}
-          <div
-            style={{
-              marginTop: 10,
-              padding: "10px 14px",
-              background: F.successBg,
-              borderRadius: 6,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={F.success}
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-            <span style={{ fontSize: 12, fontWeight: 700, color: F.success }}>
-              All statutory compliances up to date
-            </span>
-          </div>
-        </div>
+        </section>
       </div>
     </div>
   )
@@ -7248,7 +6634,8 @@ function EmployeesView({
           overflow: "hidden",
         }}
       >
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
           <thead>
             <tr>
               <Th>Employee</Th>
@@ -7433,6 +6820,7 @@ function EmployeesView({
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {showAdd && (
@@ -9650,6 +9038,9 @@ function PayRunsView({
   const [runSelectedIds, setRunSelectedIds] = useState<string[]>([])
   const [newMonth, setNewMonth] = useState(9)
   const [newYear, setNewYear] = useState(2026)
+  const payrollEligibleEmployees = emps.filter(
+    (e) => e.status !== "Inactive" && e.status !== "Incomplete" && e.grossSalary > 0,
+  )
 
   // Editing Row Modal State
   const [editingRow, setEditingRow] = useState<{
@@ -9682,19 +9073,21 @@ function PayRunsView({
             ? 3
             : activeRun.status === "Completed"
               ? 4
-              : 0
+              : activeRun.status === "Locked"
+                ? 5
+                : 0
     : 0
-  const filteredRunEmployees = emps.filter((e) =>
+  const filteredRunEmployees = payrollEligibleEmployees.filter((e) =>
     searchMatches(appliedRunEmployeeSearch, [e.name, e.id, e.department, e.designation]),
   )
   const guidedTargetEmployees = (() => {
     if (runScope === "Specific Employees") {
-      return emps.filter((e) => runSelectedIds.includes(e.id))
+      return payrollEligibleEmployees.filter((e) => runSelectedIds.includes(e.id))
     }
     if (runScope === "Department Batch") {
-      return emps.filter((e) => e.department === runSelectedIds[0])
+      return payrollEligibleEmployees.filter((e) => e.department === runSelectedIds[0])
     }
-    return emps.filter((e) => e.status === "Active")
+    return payrollEligibleEmployees
   })()
 
   const f4Periods = Array.from(new Set(payruns.map((p) => p.period)))
@@ -9754,7 +9147,8 @@ function PayRunsView({
       Calculated: "Under Review",
       "Under Review": "Approved",
       Approved: "Completed",
-      Completed: "Completed",
+      Completed: "Locked",
+      Locked: "Locked",
     }
     const nextStatus = statusMap[pr.status]
     const updatedDate = nextStatus === "Completed" ? new Date().toISOString().slice(0, 10) : pr.generatedOn
@@ -9774,6 +9168,7 @@ function PayRunsView({
     if (nextStatus === "Calculated") setCurrentStepIndex(1)
     if (nextStatus === "Under Review") setCurrentStepIndex(2)
     if (nextStatus === "Approved" || nextStatus === "Completed") setCurrentStepIndex(3)
+    if (nextStatus === "Locked") setCurrentStepIndex(4)
 
     toast(`Pay run ${pr.period} updated to "${nextStatus}"`, "success")
   }
@@ -9781,7 +9176,14 @@ function PayRunsView({
   // Recalculate all employees in the active payrun
   const handleRecalculate = () => {
     if (!activeRun) return
-    const newRows = calcRows(emps, ss)
+    if (activeRun.status === "Locked") {
+      return toast("Locked pay runs cannot be recalculated", "error")
+    }
+    const employeePool =
+      activeRun.employeeIds && activeRun.employeeIds.length > 0
+        ? payrollEligibleEmployees.filter((emp) => activeRun.employeeIds?.includes(emp.id))
+        : payrollEligibleEmployees
+    const newRows = calcRows(employeePool, ss)
     const gross = newRows.reduce((s, r) => s + r.totalEarnings, 0)
     const deductions = newRows.reduce((s, r) => s + r.totalDeductions, 0)
 
@@ -9805,6 +9207,10 @@ function PayRunsView({
   // Save Row Edits
   const handleSaveRow = () => {
     if (!editingRow || !activeRun) return
+    if (activeRun.status === "Locked") {
+      setEditingRow(null)
+      return toast("Locked pay runs cannot be edited", "error")
+    }
 
     const perDayGross = editingRow.grossSalary / 30
     const lopDeduction = Math.round(perDayGross * editingRow.lopDays)
@@ -9889,6 +9295,9 @@ function PayRunsView({
       grossPayroll: gross,
       totalDeductions: deductions,
       netPayroll: gross - deductions,
+      scope: runScope,
+      employeeIds: targetEmployees.map((emp) => emp.id),
+      note: runNote,
       generatedBy: "Meena Iyer",
       generatedOn: new Date().toISOString().slice(0, 10),
       rows,
@@ -9900,8 +9309,18 @@ function PayRunsView({
     setGuidedRunStep(1)
     setRunSelectedIds([])
     setRunEmployeeSearch("")
+    setAppliedRunEmployeeSearch("")
     setCurrentStepIndex(0)
     toast(`New Pay run for ${periodName} initialized for ${rows.length} employees`, "success")
+  }
+  const handleGuidedRunContinue = () => {
+    if (runScope === "Specific Employees" && runSelectedIds.length === 0) {
+      return toast("Select at least one employee before continuing", "error")
+    }
+    if (runScope === "Department Batch" && !runSelectedIds[0]) {
+      return toast("Select a department before continuing", "error")
+    }
+    setGuidedRunStep(2)
   }
 
   // Export Bank Batch CSV
@@ -9965,11 +9384,8 @@ function PayRunsView({
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <Btn onClick={() => setShowNewModal(true)}>Execute Guided Payroll Run</Btn>
-          <Btn variant="secondary" onClick={handleRecalculate}>
-            Recalculate All
-          </Btn>
-          <Btn variant="secondary" onClick={handleExportBankBatch}>
-            Export Bank Batch
+          <Btn variant="success" onClick={handleExportBankBatch}>
+            Export
           </Btn>
         </div>
       </div>
@@ -10069,142 +9485,171 @@ function PayRunsView({
       {/* TAB 1: RUN PAYROLL */}
       {payrollTab === "run" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {/* Active Payrun Selector Bar */}
+          {/* Unified Active Payrun Workflow Card */}
           <div
             style={{
               background: F.card,
               border: `1px solid ${F.border}`,
               borderRadius: 8,
-              padding: "14px 18px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 12,
+              overflow: "hidden",
+              boxShadow: "0 10px 28px rgba(15,23,42,0.08)",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: F.text1 }}>
-                Select Active Pay Run:
-              </span>
-              <select
-                value={activeRun?.id}
-                onChange={(e) => setActiveRunId(e.target.value)}
-                style={{ ...iSt, width: 220, cursor: "pointer", fontWeight: 700 }}
-              >
-                {payruns.map((pr) => (
-                  <option key={pr.id} value={pr.id}>
-                    {pr.period} ({pr.status})
-                  </option>
-                ))}
-              </select>
+            <div
+              style={{
+                padding: "18px 22px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 14,
+                borderBottom: `1px solid ${F.border}`,
+                background: "linear-gradient(180deg, #FFFFFF 0%, #FAFBFC 100%)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: F.text1 }}>
+                  Select Active Pay Run
+                </span>
+                <select
+                  value={activeRun?.id}
+                  onChange={(e) => setActiveRunId(e.target.value)}
+                  style={{
+                    ...iSt,
+                    width: 240,
+                    height: 38,
+                    cursor: "pointer",
+                    fontWeight: 800,
+                    borderColor: "#C9D7E6",
+                    boxShadow: "0 1px 2px rgba(15,23,42,0.04)",
+                  }}
+                >
+                  {payruns.map((pr) => (
+                    <option key={pr.id} value={pr.id}>
+                      {pr.period} ({pr.status})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {activeRun && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 12, color: F.text2, fontWeight: 700 }}>
+                    Current Status
+                  </span>
+                  {prBadge(activeRun.status)}
+                </div>
+              )}
             </div>
 
-            {activeRun && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 12, color: F.text2 }}>Current Status:</span>
-                {prBadge(activeRun.status)}
-              </div>
-            )}
-          </div>
-
-          {/* Interactive 6-Stage Workflow Stepper */}
-          <div
-            style={{
-              background: F.card,
-              border: `1px solid ${F.border}`,
-              borderRadius: 8,
-              padding: "28px 30px",
-              boxShadow: "0 2px 8px rgba(15,23,42,0.05)",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center" }}>
-              {payrunWorkflowSteps.map((step, index) => {
-                const complete = index < payrunStepIndex
-                const active = index === payrunStepIndex
-                return (
-                  <Fragment key={step}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", minWidth: 92 }}>
+            <div style={{ padding: "30px 34px 28px" }}>
+              <div style={{ display: "flex", alignItems: "center" }}>
+                {payrunWorkflowSteps.map((step, index) => {
+                  const complete = index < payrunStepIndex
+                  const active = index === payrunStepIndex
+                  const doneColor = F.success
+                  return (
+                    <Fragment key={step}>
                       <div
                         style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: "50%",
                           display: "flex",
+                          flexDirection: "column",
                           alignItems: "center",
-                          justifyContent: "center",
-                          background: complete ? F.brand : active ? F.infoBg : F.card,
-                          border: `2px solid ${complete || active ? F.brand : "#B8C7D9"}`,
-                          color: complete ? "#fff" : active ? F.brand : "#8A9AAF",
-                          fontWeight: 900,
-                          fontSize: complete ? 10 : 13,
+                          minWidth: 100,
                         }}
                       >
-                        {complete ? "Done" : index + 1}
+                        <div
+                          style={{
+                            width: 34,
+                            height: 34,
+                            borderRadius: "50%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            background: complete ? doneColor : active ? F.infoBg : F.card,
+                            border: `2px solid ${complete ? doneColor : active ? F.brand : "#B8C7D9"}`,
+                            color: complete ? "#fff" : active ? F.brand : "#8A9AAF",
+                            fontWeight: 900,
+                            fontSize: complete ? 18 : 13,
+                            lineHeight: 1,
+                            boxShadow: complete
+                              ? "0 0 0 4px rgba(16,126,62,0.12)"
+                              : active
+                                ? "0 0 0 4px rgba(0,112,242,0.12)"
+                                : "none",
+                          }}
+                        >
+                          {complete ? "✓" : index + 1}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 10,
+                            fontSize: 12,
+                            fontWeight: active || complete ? 900 : 700,
+                            color: complete ? doneColor : active ? F.brand : "#8A9AAF",
+                            textAlign: "center",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {step}
+                        </div>
                       </div>
-                      <div
-                        style={{
-                          marginTop: 8,
-                          fontSize: 12,
-                          fontWeight: active || complete ? 900 : 700,
-                          color: active || complete ? F.brand : "#8A9AAF",
-                          textAlign: "center",
-                        }}
-                      >
-                        {step}
-                      </div>
-                    </div>
-                    {index < payrunWorkflowSteps.length - 1 && (
-                      <div
-                        style={{
-                          flex: 1,
-                          height: 4,
-                          borderRadius: 4,
-                          background: index < payrunStepIndex ? F.brand : "#E1E8F0",
-                          margin: "0 4px 24px",
-                        }}
-                      />
-                    )}
-                  </Fragment>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Action Notification Strip */}
-          <div
-            style={{
-              background: activeRun?.status === "Completed" ? F.successBg : F.warningBg,
-              border: `1px solid ${activeRun?.status === "Completed" ? F.success : F.warning}40`,
-              borderLeft: `4px solid ${activeRun?.status === "Completed" ? F.success : F.warning}`,
-              borderRadius: 8,
-              padding: "14px 18px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 12,
-            }}
-          >
-            <div>
-              <strong style={{ color: F.text1, fontSize: 13 }}>
-                Pay Run: {activeRun ? activeRun.period : "August 2026"} &bull; Stage: {activeRun?.status}
-              </strong>
-              <div style={{ color: F.text2, fontSize: 12, marginTop: 2 }}>
-                {activeRun?.status === "Completed"
-                  ? "Disbursement completed. All employee payslips are finalized."
-                  : "Click 'Advance Status' to progress to the next verification or final disbursement stage."}
+                      {index < payrunWorkflowSteps.length - 1 && (
+                        <div
+                          style={{
+                            flex: 1,
+                            height: 5,
+                            borderRadius: 999,
+                            background: index < payrunStepIndex ? doneColor : "#E1E8F0",
+                            margin: "0 8px 28px",
+                            minWidth: 42,
+                            boxShadow: index < payrunStepIndex ? "0 1px 4px rgba(16,126,62,0.16)" : "none",
+                          }}
+                        />
+                      )}
+                    </Fragment>
+                  )
+                })}
               </div>
             </div>
-            {activeRun && activeRun.status !== "Completed" && (
-              <Btn onClick={() => advanceRunStatus(activeRun)}>
-                {activeRun.status === "Under Review"
-                  ? "Authorize & Approve Payroll"
-                  : activeRun.status === "Approved"
-                    ? "Disburse & Mark as Paid"
-                    : `Advance Status (${activeRun.status})`}
-              </Btn>
-            )}
+
+            <div
+              style={{
+                background: activeRun?.status === "Locked" || activeRun?.status === "Completed" ? F.successBg : F.warningBg,
+                borderTop: `1px solid ${activeRun?.status === "Locked" || activeRun?.status === "Completed" ? F.success : F.warning}35`,
+                borderLeft: `4px solid ${activeRun?.status === "Locked" || activeRun?.status === "Completed" ? F.success : F.warning}`,
+                padding: "18px 22px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 14,
+              }}
+            >
+              <div>
+                <strong style={{ color: F.text1, fontSize: 14 }}>
+                  Pay Run: {activeRun ? activeRun.period : "August 2026"} &bull; Stage: {activeRun?.status}
+                </strong>
+                <div style={{ color: F.text2, fontSize: 12, marginTop: 4, lineHeight: 1.45 }}>
+                  {activeRun?.status === "Locked"
+                    ? "Payroll is locked. Calculations, employee rows, and disbursement totals are read-only."
+                    : activeRun?.status === "Completed"
+                      ? "Disbursement completed. Lock the run to freeze all payroll records."
+                    : "Click 'Advance Status' to progress to the next verification or final disbursement stage."}
+                </div>
+              </div>
+              {activeRun && activeRun.status !== "Locked" && (
+                <Btn onClick={() => advanceRunStatus(activeRun)}>
+                  {activeRun.status === "Under Review"
+                    ? "Authorize & Approve Payroll"
+                    : activeRun.status === "Approved"
+                      ? "Disburse & Mark as Paid"
+                      : activeRun.status === "Completed"
+                        ? "Lock Pay Run"
+                      : `Advance Status (${activeRun.status})`}
+                </Btn>
+              )}
+            </div>
           </div>
 
           {/* Employee Pay Run Sheet Table */}
@@ -10307,7 +9752,11 @@ function PayRunsView({
                             <Btn
                               small
                               variant="secondary"
-                              onClick={() =>
+                              onClick={() => {
+                                if (activeRun.status === "Locked") {
+                                  toast(`Calculation trace opened for ${row.empName}. This locked run is read-only.`, "info")
+                                  return
+                                }
                                 setEditingRow({
                                   row,
                                   empName: row.empName,
@@ -10317,7 +9766,7 @@ function PayRunsView({
                                   incentive: row.incentive,
                                   tds: row.tds,
                                 })
-                              }
+                              }}
                             >
                               Trace
                             </Btn>
@@ -10498,6 +9947,7 @@ function PayRunsView({
                     <option value="Under Review">Under Review</option>
                     <option value="Draft">Draft</option>
                     <option value="Calculated">Calculated</option>
+                    <option value="Locked">Locked</option>
                   </select>
                 </div>
 
@@ -10749,7 +10199,7 @@ function PayRunsView({
           wide
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ fontSize: 13, color: F.text2 }}>
+            <div style={{ fontSize: 14, color: F.text2, lineHeight: 1.55 }}>
               Calculate salary structures, attendance proration, LOP, TDS, professional tax, and statutory deductions.
             </div>
 
@@ -10806,14 +10256,16 @@ function PayRunsView({
                             border: `1px solid ${active ? F.brand : F.border}`,
                             borderRadius: 8,
                             background: active ? F.infoBg : F.card,
-                            padding: "14px 16px",
+                            padding: "16px 18px",
                             textAlign: "left",
                             cursor: "pointer",
                             fontFamily: "inherit",
+                            boxShadow: active ? "0 0 0 1px rgba(0,112,242,0.18)" : "0 1px 2px rgba(15,23,42,0.04)",
+                            transition: "border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease",
                           }}
                         >
-                          <div style={{ fontSize: 13, fontWeight: 900, color: F.text1 }}>{scope}</div>
-                          <div style={{ fontSize: 12, color: F.text2, marginTop: 4 }}>
+                          <div style={{ fontSize: 14, fontWeight: 900, color: F.text1 }}>{scope}</div>
+                          <div style={{ fontSize: 12, color: F.text2, marginTop: 6, lineHeight: 1.35 }}>
                             {scope === "All Employees"
                               ? "Full organization monthly batch"
                               : scope === "Specific Employees"
@@ -10827,7 +10279,7 @@ function PayRunsView({
                 </Fld>
 
                 {runScope === "Specific Employees" && (
-                  <div style={{ border: `1px solid ${F.border}`, borderRadius: 8, padding: 14, background: F.pageBg }}>
+                  <div style={{ border: `1px solid ${F.border}`, borderRadius: 8, padding: 16, background: "#FAFBFC", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.8)" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                       <strong style={{ fontSize: 13 }}>
                         Select employees for this run ({runSelectedIds.length} selected)
@@ -10849,7 +10301,7 @@ function PayRunsView({
                       value={runEmployeeSearch}
                       onChange={setRunEmployeeSearch}
                       placeholder="Search employees by name or code..."
-                      values={emps.map((e) => `${e.name} (${e.id})`)}
+                      values={payrollEligibleEmployees.map((e) => `${e.name} (${e.id})`)}
                     />
                     <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                       <Btn small onClick={() => setAppliedRunEmployeeSearch(runEmployeeSearch)}>
@@ -10866,9 +10318,9 @@ function PayRunsView({
                         Clear Filters
                       </Btn>
                     </div>
-                    <div style={{ marginTop: 12, maxHeight: 220, overflowY: "auto", border: `1px solid ${F.border}`, borderRadius: 8, background: F.card }}>
+                    <div style={{ marginTop: 12, maxHeight: 260, overflowY: "auto", border: `1px solid ${F.border}`, borderRadius: 8, background: F.card }}>
                       {filteredRunEmployees.map((emp) => (
-                        <label key={emp.id} style={{ display: "grid", gridTemplateColumns: "28px 1fr auto", gap: 10, alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${F.border}60`, cursor: "pointer" }}>
+                        <label key={emp.id} style={{ display: "grid", gridTemplateColumns: "28px 1fr auto", gap: 12, alignItems: "center", padding: "14px 16px", borderBottom: `1px solid ${F.border}60`, cursor: "pointer" }}>
                           <input
                             type="checkbox"
                             checked={runSelectedIds.includes(emp.id)}
@@ -10888,6 +10340,11 @@ function PayRunsView({
                           <strong>{inr(emp.grossSalary * 12)} CTC</strong>
                         </label>
                       ))}
+                      {filteredRunEmployees.length === 0 && (
+                        <div style={{ padding: 28, textAlign: "center", color: F.text3, fontSize: 13 }}>
+                          No payroll-ready employees match this search.
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -10900,7 +10357,7 @@ function PayRunsView({
                       style={iSt}
                     >
                       <option value="">Select department</option>
-                      {Array.from(new Set(emps.map((e) => e.department))).sort().map((dept) => (
+                      {Array.from(new Set(payrollEligibleEmployees.map((e) => e.department))).sort().map((dept) => (
                         <option key={dept}>{dept}</option>
                       ))}
                     </select>
@@ -10920,7 +10377,7 @@ function PayRunsView({
                   <Btn variant="secondary" onClick={() => setShowNewModal(false)}>
                     Cancel
                   </Btn>
-                  <Btn onClick={() => setGuidedRunStep(2)}>Continue</Btn>
+                  <Btn onClick={handleGuidedRunContinue}>Continue</Btn>
                 </div>
               </>
             ) : (
@@ -10995,9 +10452,11 @@ function PayRunsView({
               <Btn variant="secondary" onClick={() => setSelectedHistoryRun(null)}>
                 Close
               </Btn>
-              {selectedHistoryRun.status !== "Completed" && (
+              {selectedHistoryRun.status !== "Locked" && (
                 <Btn onClick={() => advanceRunStatus(selectedHistoryRun)}>
-                  Advance Status ({selectedHistoryRun.status}) &rarr;
+                  {selectedHistoryRun.status === "Completed"
+                    ? "Lock Pay Run"
+                    : `Advance Status (${selectedHistoryRun.status}) ->`}
                 </Btn>
               )}
             </div>
@@ -11042,7 +10501,7 @@ function PayslipsView({
     run: Payrun
   } | null>(null)
 
-  const completed = payruns.filter((p) => p.status === "Completed")
+  const completed = payruns.filter((p) => isFinalizedPayrun(p.status))
   const depts = ["All", ...Array.from(new Set(emps.map((e) => e.department)))]
   const empNames = emps.map((e) => e.name)
 
@@ -11584,11 +11043,11 @@ function ReportsView({
   const [active, setActive] = useState("payroll_summary")
   const [period, setPeriod] = useState("July 2026")
   const completedPeriods = payruns
-    .filter((p) => p.status === "Completed")
+    .filter((p) => isFinalizedPayrun(p.status))
     .map((p) => p.period)
   const pr =
-    payruns.find((p) => p.period === period && p.status === "Completed") ??
-    payruns.find((p) => p.status === "Completed")
+    payruns.find((p) => p.period === period && isFinalizedPayrun(p.status)) ??
+    payruns.find((p) => isFinalizedPayrun(p.status))
   const REPORT_LIST = [
     { id: "payroll_summary", label: "Payroll Summary" },
     { id: "employee_payroll", label: "Employee Payroll" },
@@ -12981,185 +12440,283 @@ function PlatformDashboard({
     },
   ].filter((x) => x.value > 0)
   const trend = [72, 78, 82, 86, 91, 96, Math.max(totalEmployees, 100)]
+  const cardStyle: React.CSSProperties = {
+    background: F.card,
+    border: `1px solid ${F.border}`,
+    borderRadius: 8,
+    padding: "20px 22px",
+    boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+  }
+
+  const growthPct = 8.7
+  const activeRatio = orgs.length > 0 ? Math.round((active / orgs.length) * 100) : 100
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* ── Top Header Profile & Status Banner ── */}
       <div
         style={{
           background: F.card,
           border: `1px solid ${F.border}`,
           borderRadius: 8,
-          padding: "18px 24px",
+          padding: "20px 24px",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+          gap: 20,
+          flexWrap: "wrap",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
         }}
       >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <span style={{ fontSize: 18 }}>{greetingIcon}</span>
-            <h1
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <div
+            style={{
+              width: 58,
+              height: 58,
+              borderRadius: "50%",
+              background: `linear-gradient(135deg, ${F.brand}, #0854A0)`,
+              color: "#FFFFFF",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 20,
+              fontWeight: 800,
+              boxShadow: "0 2px 8px rgba(0,112,242,0.25)",
+              flexShrink: 0,
+            }}
+          >
+            PA
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: F.text2,
+                }}
+              >
+                PLATFORM WORKSPACE
+              </span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: F.brand,
+                  background: F.infoBg,
+                  padding: "2px 10px",
+                  borderRadius: 12,
+                }}
+              >
+                {todayStr}
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 18 }}>{greetingIcon}</span>
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: 24,
+                  fontWeight: 800,
+                  color: F.text1,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {greeting}, <span style={{ fontWeight: 800 }}>Platform Admin</span>
+              </h1>
+              <Badge
+                label="Operational"
+                color={F.success}
+                bg={F.successBg}
+                dot={F.success}
+              />
+              <Badge
+                label="99.9% Uptime"
+                color={F.brand}
+                bg={F.infoBg}
+              />
+            </div>
+            <div
               style={{
-                margin: 0,
-                fontSize: 22,
-                fontWeight: 800,
-                color: F.text1,
-                letterSpacing: "-0.3px",
+                marginTop: 4,
+                fontSize: 13,
+                color: F.text2,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
               }}
             >
-              {greeting}, Platform Admin
-            </h1>
+              <span>Super Administrator</span>
+              <span>&bull;</span>
+              <span>Naxpayroll Global Control Center</span>
+              <span>&bull;</span>
+              <span>Multi-Tenant Root</span>
+              <span>&bull;</span>
+              <span style={{ color: F.text3 }}>ID: PLT-ADM-01</span>
+            </div>
           </div>
-          <p style={{ margin: 0, fontSize: 13, color: F.text2 }}>
-            Naxpayroll Platform Health &bull; System Analytics
-          </p>
         </div>
+
         <div
           style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: F.brand,
-            background: F.infoBg,
-            padding: "5px 12px",
-            borderRadius: 16,
-            border: `1px solid ${F.brand}20`,
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
           }}
         >
-          {todayStr}
+          <div
+            style={{
+              textAlign: "right",
+              paddingRight: 12,
+              borderRight: `1px solid ${F.border}`,
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, color: F.text3 }}>
+              SYSTEM STATUS
+            </div>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: F.success,
+                marginTop: 2,
+              }}
+            >
+              All Services Healthy
+            </div>
+          </div>
+          <Btn
+            onClick={() => onNav("orgs")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              fontWeight: 700,
+            }}
+          >
+            <span>Manage Organizations</span>
+            <span style={{ fontSize: 14 }}>&rarr;</span>
+          </Btn>
         </div>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <div>
-          <h2
-            style={{ margin: 0, fontSize: 18, fontWeight: 800, color: F.text1 }}
-          >
-            Platform Overview
-          </h2>
-          <p style={{ margin: "2px 0 0", fontSize: 12, color: F.text2 }}>
-            Organization metrics and subscription status
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Btn
-            variant="secondary"
-            onClick={() => toast("Platform summary exported", "success")}
-          >
-            Export summary
-          </Btn>
-          <Btn onClick={() => onNav("orgs")}>Manage organizations</Btn>
-        </div>
-      </div>
+      {/* ── KPI Metric Summary Cards Grid (4 Columns) ── */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(4,1fr)",
-          gap: 12,
+          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gap: 16,
         }}
       >
-        {[
-          {
-            l: "Active organizations",
-            v: String(active),
-            s: `${orgs.length} total workspaces`,
-            c: F.success,
-          },
-          {
-            l: "Managed employees",
-            v: String(totalEmployees),
-            s: "Across active organizations",
-            c: F.brand,
-          },
-          {
-            l: "Product Admins",
-            v: "4",
-            s: "Platform-level administrators",
-            c: F.warning,
-          },
-          { l: "System uptime", v: "99.9%", s: "Last 30 days", c: "#8A5CF6" },
-        ].map((x) => (
-          <div
-            key={x.l}
-            style={{
-              background: F.card,
-              border: `1px solid ${F.border}`,
-              borderRadius: 8,
-              padding: "17px 18px",
-              borderTop: `3px solid ${x.c}`,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                textTransform: "uppercase",
-                letterSpacing: ".06em",
-                fontWeight: 700,
-                color: F.text3,
-              }}
-            >
-              {x.l}
-            </div>
-            <div
-              style={{
-                fontSize: 25,
-                fontWeight: 800,
-                color: F.text1,
-                marginTop: 10,
-              }}
-            >
-              {x.v}
-            </div>
-            <div style={{ fontSize: 12, color: F.text2, marginTop: 5 }}>
-              {x.s}
-            </div>
-          </div>
-        ))}
+        <EmployeeMetricCard
+          label="ACTIVE WORKSPACES"
+          value={String(active)}
+          sub={`${orgs.length} total registered organizations`}
+          accent={F.brand}
+          badgeText={`${activeRatio}% Active`}
+          badgeBg={F.infoBg}
+          badgeColor={F.brand}
+          progress={activeRatio}
+          onClick={() => onNav("orgs")}
+        />
+        <EmployeeMetricCard
+          label="MANAGED WORKFORCE"
+          value={totalEmployees.toLocaleString("en-IN")}
+          sub="Employees across active client workspaces"
+          accent={F.success}
+          badgeText={`+${growthPct}% MoM`}
+          badgeBg={F.successBg}
+          badgeColor={F.success}
+          progress={92}
+          onClick={() => onNav("orgs")}
+        />
+        <EmployeeMetricCard
+          label="PRODUCT ADMINISTRATORS"
+          value="4"
+          sub="Platform-level privileged admins"
+          accent={F.warning}
+          badgeText="Privileged"
+          badgeBg={F.warningBg}
+          badgeColor={F.warning}
+          progress={100}
+          onClick={() => onNav("access")}
+        />
+        <EmployeeMetricCard
+          label="SYSTEM RELIABILITY"
+          value="99.9%"
+          sub="Continuous uptime across 30 days"
+          accent="#8A5CF6"
+          badgeText="SLA Met"
+          badgeBg="#F3E8FF"
+          badgeColor="#8A5CF6"
+          progress={99}
+          onClick={() => onNav("audit")}
+        />
       </div>
+
+      {/* ── Main Analytics Section: Workforce Growth + Organization Status Breakdown ── */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1.35fr .85fr",
-          gap: 14,
+          gridTemplateColumns: "minmax(0, 1.45fr) minmax(320px, 0.95fr)",
+          gap: 20,
         }}
       >
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 8,
-            padding: "20px 22px",
-          }}
-        >
+        <section style={cardStyle}>
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
-              marginBottom: 20,
+              alignItems: "flex-start",
+              marginBottom: 16,
+              gap: 12,
             }}
           >
             <div>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>
-                Workforce growth
-              </div>
-              <div style={{ fontSize: 12, color: F.text3, marginTop: 3 }}>
-                Total managed employees · last 7 months
-              </div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: F.text1,
+                }}
+              >
+                Workforce Growth Trend
+              </h2>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: 12,
+                  color: F.text2,
+                }}
+              >
+                Total managed employee headcount over the last 7 months
+              </p>
             </div>
-            <Badge label="+8.7%" color={F.success} bg={F.successBg} />
+            <div
+              style={{
+                fontSize: 11,
+                color: F.text3,
+                fontWeight: 600,
+                background: F.pageBg,
+                padding: "3px 8px",
+                borderRadius: 4,
+              }}
+            >
+              Last 7 Months
+            </div>
           </div>
           <div
             style={{
-              height: 150,
+              height: 160,
               display: "flex",
               alignItems: "end",
-              gap: 14,
-              padding: "0 6px",
+              gap: 16,
+              padding: "0 10px",
               borderBottom: `1px solid ${F.border}`,
             }}
           >
@@ -13176,15 +12733,16 @@ function PlatformDashboard({
                   gap: 7,
                 }}
               >
-                <div style={{ fontSize: 10, color: F.text3 }}>{v}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: F.text2 }}>{v}</div>
                 <div
                   style={{
                     width: "100%",
-                    maxWidth: 42,
-                    height: `${(v / trend[trend.length - 1]) * 100}%`,
-                    minHeight: 12,
+                    maxWidth: 46,
+                    height: `${(v / Math.max(...trend)) * 100}%`,
+                    minHeight: 14,
                     borderRadius: "4px 4px 0 0",
-                    background: i === trend.length - 1 ? F.brand : "#B8D9F5",
+                    background: i === trend.length - 1 ? F.brand : "#93C5FD",
+                    transition: "all 0.2s ease",
                   }}
                 />
               </div>
@@ -13195,8 +12753,10 @@ function PlatformDashboard({
               display: "flex",
               justifyContent: "space-between",
               fontSize: 11,
+              fontWeight: 600,
               color: F.text3,
-              marginTop: 8,
+              marginTop: 10,
+              padding: "0 6px",
             }}
           >
             <span>Mar</span>
@@ -13207,66 +12767,63 @@ function PlatformDashboard({
             <span>Aug</span>
             <span>Sep</span>
           </div>
-        </div>
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 8,
-            padding: "18px 20px",
-          }}
-        >
-          <div style={{ fontWeight: 700, fontSize: 15 }}>
-            Organization status
-          </div>
-          <div style={{ fontSize: 12, color: F.text3, marginTop: 3 }}>
-            Workspace readiness at a glance
-          </div>
+        </section>
+
+        <section style={cardStyle}>
           <div
             style={{
               display: "flex",
-              alignItems: "center",
-              gap: 20,
-              marginTop: 18,
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: 14,
             }}
           >
-            <RingChart
-              size={126}
-              segments={statusSegments}
-              centerLabel={`${active}/${orgs.length}`}
-              centerSub="active"
-            />
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {statusSegments.map((x) => (
-                <div
-                  key={x.label}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 7,
-                    fontSize: 12,
-                    color: F.text2,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 99,
-                      background: x.color,
-                    }}
-                  />
-                  <span>{x.label}</span>
-                  <strong style={{ color: F.text1, marginLeft: "auto" }}>
-                    {x.value}
-                  </strong>
-                </div>
-              ))}
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: F.text1,
+                }}
+              >
+                Workspace Status
+              </h2>
+              <p
+                style={{
+                  margin: "4px 0 0",
+                  fontSize: 12,
+                  color: F.text2,
+                }}
+              >
+                Organization lifecycle distribution
+              </p>
             </div>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                color: F.brand,
+                background: F.infoBg,
+                padding: "2px 8px",
+                borderRadius: 4,
+              }}
+            >
+              {orgs.length} Total
+            </span>
           </div>
-        </div>
+          <AnalyticsDonutChart segments={statusSegments} />
+        </section>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+
+      {/* ── Lower Section: Platform Alerts + Recent Audit Activity ── */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 1fr)",
+          gap: 20,
+        }}
+      >
         <div
           style={{
             background: F.card,
@@ -17904,6 +17461,24 @@ function NavIcon({ id }: { id: string }) {
         <polyline points="9 22 9 12 15 12 15 22" />
       </svg>
     )
+  if (id === "documents")
+    return (
+      <svg style={s} viewBox="0 0 24 24" {...p}>
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <line x1="10" y1="9" x2="8" y2="9" />
+      </svg>
+    )
+  if (id === "financial")
+    return (
+      <svg style={s} viewBox="0 0 24 24" {...p}>
+        <rect x="2" y="4" width="20" height="16" rx="2" />
+        <line x1="2" y1="10" x2="22" y2="10" />
+        <line x1="6" y1="15" x2="10" y2="15" />
+      </svg>
+    )
   if (id === "profile")
     return (
       <svg style={s} viewBox="0 0 24 24" {...p}>
@@ -17985,6 +17560,7 @@ function EmployeeMetricCard({
   badgeColor,
   icon,
   progress,
+  onClick,
 }: {
   label: string
   value: string
@@ -17995,9 +17571,39 @@ function EmployeeMetricCard({
   badgeColor?: string
   icon?: string
   progress?: number
+  onClick?: () => void
 }) {
   return (
     <div
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onClick()
+              }
+            }
+          : undefined
+      }
+      onMouseEnter={
+        onClick
+          ? (e) => {
+              e.currentTarget.style.transform = "translateY(-3px)"
+              e.currentTarget.style.boxShadow = "0 8px 20px rgba(0,0,0,0.08)"
+            }
+          : undefined
+      }
+      onMouseLeave={
+        onClick
+          ? (e) => {
+              e.currentTarget.style.transform = "translateY(0)"
+              e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.04)"
+            }
+          : undefined
+      }
       style={{
         background: F.card,
         border: `1px solid ${F.border}`,
@@ -18009,7 +17615,9 @@ function EmployeeMetricCard({
         position: "relative",
         overflow: "hidden",
         boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-        transition: "box-shadow 0.2s ease, transform 0.2s ease",
+        cursor: onClick ? "pointer" : "default",
+        transition: "box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease",
+        userSelect: "none",
       }}
     >
       <div
@@ -18042,21 +17650,35 @@ function EmployeeMetricCard({
           >
             {label}
           </span>
-          {badgeText && (
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                padding: "2px 8px",
-                borderRadius: 12,
-                background: badgeBg || F.pageBg,
-                color: badgeColor || F.text2,
-                border: `1px solid ${accent}25`,
-              }}
-            >
-              {badgeText}
-            </span>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {badgeText && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: "2px 8px",
+                  borderRadius: 12,
+                  background: badgeBg || F.pageBg,
+                  color: badgeColor || F.text2,
+                  border: `1px solid ${accent}25`,
+                }}
+              >
+                {badgeText}
+              </span>
+            )}
+            {onClick && (
+              <span
+                style={{
+                  fontSize: 12,
+                  color: accent,
+                  fontWeight: 800,
+                  opacity: 0.8,
+                }}
+              >
+                &rarr;
+              </span>
+            )}
+          </div>
         </div>
         <div
           style={{
@@ -18879,7 +18501,7 @@ function EmployeeDashboardView({
     year: "numeric",
   })
   const rows = employeeRows(emp, payruns)
-  const completed = rows.filter((item) => item.run.status === "Completed")
+  const completed = rows.filter((item) => isFinalizedPayrun(item.run.status))
   const latestCompleted = completed[completed.length - 1] ?? rows[rows.length - 1]
   const salary = structures.find((item) => item.name === emp.salaryStructure)
 
@@ -18891,7 +18513,7 @@ function EmployeeDashboardView({
     (run.year === fyStartYear && run.month >= 4) ||
     (run.year === fyStartYear + 1 && run.month <= 3)
   const fyRows = rows.filter(
-    (item) => isFY(item.run) && item.run.status === "Completed",
+    (item) => isFY(item.run) && isFinalizedPayrun(item.run.status),
   )
 
   // YTD calculations
@@ -19145,6 +18767,7 @@ function EmployeeDashboardView({
             badgeBg={F.infoBg}
             badgeColor={F.brand}
             progress={100}
+            onClick={() => onNav("history")}
           />
           <EmployeeMetricCard
             label="YTD Total Deductions"
@@ -19155,6 +18778,7 @@ function EmployeeDashboardView({
             badgeBg={F.warningBg}
             badgeColor={F.warning}
             progress={deductionRatio}
+            onClick={() => onNav("history")}
           />
           <EmployeeMetricCard
             label="YTD Net Take-Home"
@@ -19165,6 +18789,7 @@ function EmployeeDashboardView({
             badgeBg={F.successBg}
             badgeColor={F.success}
             progress={takeHomeRatio}
+            onClick={() => onNav("payslips")}
           />
           <EmployeeMetricCard
             label="Loss Of Pay (LOP)"
@@ -19178,6 +18803,7 @@ function EmployeeDashboardView({
             badgeText={ytdLopDays > 0 ? "LOP Impact" : "No Deductions"}
             badgeBg={ytdLopDays > 0 ? F.errorBg : "#E6F4EA"}
             badgeColor={ytdLopDays > 0 ? F.error : "#137333"}
+            onClick={() => onNav("salary")}
           />
         </div>
       )}
@@ -19222,17 +18848,22 @@ function EmployeeDashboardView({
                 Monthly Gross salary vs Net Take-Home pay over recent pay cycles
               </p>
             </div>
-            <div
-              style={{
-                fontSize: 11,
-                color: F.text3,
-                fontWeight: 600,
-                background: F.pageBg,
-                padding: "3px 8px",
-                borderRadius: 4,
-              }}
-            >
-              Last 12 Months
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: F.text3,
+                  fontWeight: 600,
+                  background: F.pageBg,
+                  padding: "3px 8px",
+                  borderRadius: 4,
+                }}
+              >
+                Last 12 Months
+              </div>
+              <Btn small variant="ghost" onClick={() => onNav("history")}>
+                View History &rarr;
+              </Btn>
             </div>
           </div>
           {!ready ? (
@@ -19273,20 +18904,25 @@ function EmployeeDashboardView({
                 {latestCompleted?.run.period ?? "Latest cycle"} salary composition
               </p>
             </div>
-            {latestCompleted && (
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: F.brand,
-                  background: F.infoBg,
-                  padding: "2px 8px",
-                  borderRadius: 4,
-                }}
-              >
-                {latestCompleted.run.period}
-              </span>
-            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {latestCompleted && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: F.brand,
+                    background: F.infoBg,
+                    padding: "2px 8px",
+                    borderRadius: 4,
+                  }}
+                >
+                  {latestCompleted.run.period}
+                </span>
+              )}
+              <Btn small variant="ghost" onClick={() => onNav("payslips")}>
+                View Payslips &rarr;
+              </Btn>
+            </div>
           </div>
           {!ready ? (
             <SkeletonCard height={240} />
@@ -20501,7 +20137,7 @@ function PayrollHistoryView({
     })
 
   // Calculations for summary KPI cards
-  const completedRuns = runs.filter((r) => r.run.status === "Completed")
+  const completedRuns = runs.filter((r) => isFinalizedPayrun(r.run.status))
   const totalDisbursedYtd = completedRuns.reduce((sum, r) => sum + r.row.netSalary, 0)
   const totalGrossYtd = completedRuns.reduce((sum, r) => sum + r.row.totalEarnings, 0)
   const avgMonthlyNet = completedRuns.length > 0 ? Math.round(totalDisbursedYtd / completedRuns.length) : 0
@@ -20805,6 +20441,7 @@ function PayrollHistoryView({
             <option value="Approved">Approved</option>
             <option value="Under Review">Under Review</option>
             <option value="Draft">Draft</option>
+            <option value="Locked">Locked</option>
           </select>
         </div>
 
@@ -21313,7 +20950,7 @@ function EmployeePayslipsView({
   })
 
   const runs = ownPayruns(payruns, emp.id).filter(
-    (r) => r.status === "Completed",
+    (r) => isFinalizedPayrun(r.status),
   )
 
   const f4Periods = Array.from(new Set(runs.map((r) => r.period)))
@@ -21970,6 +21607,7 @@ function DocumentsView({
   orgDocs?: OrgDocument[]
   emp?: Employee
 }) {
+  const toast = useToast()
   const [docSearch, setDocSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [sourceFilter, setSourceFilter] = useState("all")
@@ -21982,8 +21620,6 @@ function DocumentsView({
     statusFilter: "all",
     docSort: "name-asc",
   })
-  const [favorites, setFavorites] = useState<string[]>([])
-  const [acknowledged, setAcknowledged] = useState<string[]>([])
   const [previewDoc, setPreviewDoc] = useState<{
     name: string
     date: string
@@ -22049,7 +21685,7 @@ function DocumentsView({
       size: "280 KB",
       desc: "Confidentiality agreement signed at onboarding.",
       source: "Employee File",
-      status: "Acknowledgement Pending",
+      status: "Read Only",
     },
   ]
 
@@ -22066,8 +21702,7 @@ function DocumentsView({
     if (appliedDocumentFilters.sourceFilter !== "all" && doc.source !== appliedDocumentFilters.sourceFilter) {
       return false
     }
-    const docStatus = acknowledged.includes(doc.name) ? "Acknowledged" : doc.status
-    if (appliedDocumentFilters.statusFilter !== "all" && docStatus !== appliedDocumentFilters.statusFilter) {
+    if (appliedDocumentFilters.statusFilter !== "all" && doc.status !== appliedDocumentFilters.statusFilter) {
       return false
     }
     return true
@@ -22086,9 +21721,40 @@ function DocumentsView({
   })
 
   const documentSources = Array.from(new Set(docs.map((d) => d.source)))
-  const documentStatuses = Array.from(
-    new Set([...docs.map((d) => d.status), "Acknowledged"]),
-  )
+  const documentStatuses = Array.from(new Set(docs.map((d) => d.status)))
+  const downloadDocument = (doc: typeof docs[number]) => {
+    const content = [
+      "Naxpayroll Employee Document",
+      `Document: ${doc.name}`,
+      `Issue Date: ${doc.date}`,
+      `Category: ${doc.type}`,
+      `Source: ${doc.source}`,
+      `Status: ${doc.status}`,
+      "",
+      doc.desc,
+      "",
+      "This file is system-generated for preview/download in the employee document center.",
+    ].join("\n")
+    const blob = new Blob([content], { type: "application/pdf" })
+    const a = document.createElement("a")
+    a.href = URL.createObjectURL(blob)
+    a.download = `${doc.name.replace(/[^a-z0-9]+/gi, "_").replace(/^_|_$/g, "")}.pdf`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    toast(`${doc.name} downloaded`, "success")
+  }
+  const documentBadge = (status: string) => {
+    if (status === "Verified") {
+      return <Badge label="Verified" color={F.success} bg={F.successBg} dot={F.success} />
+    }
+    if (status === "Published") {
+      return <Badge label="Published" color={F.brand} bg={F.infoBg} dot={F.brand} />
+    }
+    if (status === "Read Only") {
+      return <Badge label="Read Only" color={F.warning} bg={F.warningBg} dot={F.warning} />
+    }
+    return <Badge label={status} color={F.text2} bg={F.pageBg} dot={F.text3} />
+  }
   const hasDocumentFilters = Boolean(
     activeSearch(appliedDocumentFilters.docSearch) ||
       appliedDocumentFilters.categoryFilter !== "all" ||
@@ -22156,8 +21822,8 @@ function DocumentsView({
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
         <Tile label="Available Documents" value={String(docs.length)} sub="Assigned and employee records" accent={F.brand} />
         <Tile label="Verified Records" value={String(docs.filter((d) => d.status === "Verified").length)} sub="Ready for official use" accent={F.success} />
-        <Tile label="Pending Acknowledgement" value={String(docs.filter((d) => !acknowledged.includes(d.name) && d.status.includes("Pending")).length)} sub="Needs employee confirmation" accent={F.warning} />
-        <Tile label="Favorites" value={String(favorites.length)} sub="Pinned for quick access" accent="#00A389" />
+        <Tile label="Read-only Files" value={String(docs.length)} sub="View and download access only" accent={F.warning} />
+        <Tile label="Managed Sources" value={String(documentSources.length)} sub="HR, payroll, and employee file" accent="#00A389" />
       </div>
 
       {/* Filter & F4 Search Toolbar */}
@@ -22335,41 +22001,15 @@ function DocumentsView({
                   </td>
                   <td style={{ padding: "14px 14px", color: F.text2 }}>{doc.source}</td>
                   <td style={{ padding: "14px 14px", textAlign: "center" }}>
-                    <Badge
-                      label={acknowledged.includes(doc.name) ? "Acknowledged" : doc.status}
-                      color={acknowledged.includes(doc.name) || doc.status === "Verified" ? F.success : F.warning}
-                      bg={acknowledged.includes(doc.name) || doc.status === "Verified" ? F.successBg : F.warningBg}
-                    />
+                    {documentBadge(doc.status)}
                   </td>
                   <td style={{ padding: "14px 14px", color: F.text3, fontSize: 12 }}>
                     PDF ({doc.size})
                   </td>
                   <td style={{ padding: "14px 18px", textAlign: "right" }}>
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}>
-                      <Btn
-                        small
-                        variant="secondary"
-                        onClick={() =>
-                          setFavorites((prev) =>
-                            prev.includes(doc.name)
-                              ? prev.filter((name) => name !== doc.name)
-                              : [...prev, doc.name],
-                          )
-                        }
-                      >
-                        {favorites.includes(doc.name) ? "Unpin" : "Pin"}
-                      </Btn>
-                      {!acknowledged.includes(doc.name) && (
-                        <Btn
-                          small
-                          variant="success"
-                          onClick={() => setAcknowledged((prev) => [...prev, doc.name])}
-                        >
-                          Acknowledge
-                        </Btn>
-                      )}
-                      <Btn small onClick={() => setPreviewDoc(doc)}>
-                        View Document
+                      <Btn small variant="secondary" onClick={() => setPreviewDoc(doc)}>
+                        View
                       </Btn>
                     </div>
                   </td>
@@ -22398,7 +22038,7 @@ function DocumentsView({
         }}
       >
         <div>
-          <strong style={{ color: F.text1 }}>Document Storage Policy:</strong> Documents issued by HR are read-only and digitally verified. New letters or tax forms appear automatically upon release.
+          <strong style={{ color: F.text1 }}>Document Storage Policy:</strong> Documents issued by HR are read-only and digitally verified. Employees can view or download documents, but cannot acknowledge, edit, pin, or change their status.
         </div>
       </div>
 
@@ -22411,30 +22051,36 @@ function DocumentsView({
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div
               style={{
-                background: F.pageBg,
+                background: "linear-gradient(180deg, #FFFFFF 0%, #F7FAFC 100%)",
                 border: `1px solid ${F.border}`,
                 borderRadius: 8,
                 padding: "20px 24px",
+                boxShadow: "0 1px 3px rgba(15,23,42,0.04)",
               }}
             >
-              <div style={{ fontSize: 11, fontWeight: 700, color: F.brand, textTransform: "uppercase" }}>
-                {previewDoc.type} DOCUMENT
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: F.brand, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    {previewDoc.type} Document
+                  </div>
+                  <h3 style={{ margin: "5px 0 6px", fontSize: 18, color: F.text1, lineHeight: 1.25 }}>
+                    {previewDoc.name}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: 13, color: F.text2 }}>
+                    Issued on {previewDoc.date} &bull; File Size: {previewDoc.size}
+                  </p>
+                </div>
+                {documentBadge(previewDoc.status)}
               </div>
-              <h3 style={{ margin: "4px 0 6px", fontSize: 18, color: F.text1 }}>
-                {previewDoc.name}
-              </h3>
-              <p style={{ margin: 0, fontSize: 13, color: F.text2 }}>
-                Issued on {previewDoc.date} &bull; File Size: {previewDoc.size}
-              </p>
             </div>
 
             <div
               style={{
-                border: `1px dashed ${F.border}`,
+                border: `1px solid ${F.border}`,
                 borderRadius: 8,
-                padding: 40,
+                padding: "38px 40px",
                 textAlign: "center",
-                background: F.card,
+                background: "#FBFCFD",
               }}
             >
               <strong style={{ color: F.text1, fontSize: 14, display: "block" }}>
@@ -22452,7 +22098,7 @@ function DocumentsView({
               <Btn variant="secondary" onClick={() => setPreviewDoc(null)}>
                 Close
               </Btn>
-              <Btn onClick={() => window.alert(`Downloading ${previewDoc.name}...`)}>
+              <Btn onClick={() => downloadDocument(previewDoc)}>
                 Download PDF
               </Btn>
             </div>
@@ -22476,7 +22122,7 @@ function FinancialDataView({
   const [activeTab, setActiveTab] = useState<"regime" | "declarations" | "deductions">("regime")
 
   const latest = ownPayruns(payruns, emp.id)
-    .find((r) => r.status === "Completed")
+    .find((r) => isFinalizedPayrun(r.status))
     ?.rows.find((r) => r.empId === emp.id)
 
   const declarations = [
@@ -23613,8 +23259,8 @@ export default function App() {
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 10,
-                      padding: sidebarOpen ? "10px 14px" : "12px",
+                      gap: 12,
+                      padding: sidebarOpen ? "10px 16px" : "11px 0",
                       justifyContent: sidebarOpen ? "flex-start" : "center",
                       background: active
                         ? "rgba(255,255,255,0.18)"
@@ -23624,13 +23270,13 @@ export default function App() {
                         active ? F.brand : "transparent"
                       }`,
                       cursor: "pointer",
-                      color: active ? "#fff" : "rgba(255,255,255,0.6)",
+                      color: active ? "#FFFFFF" : "rgba(255,255,255,0.70)",
                       textAlign: "left",
                       fontSize: 13,
                       fontWeight: active ? 600 : 400,
                       width: "100%",
                       fontFamily: "inherit",
-                      transition: "all 0.12s",
+                      transition: "all 0.12s ease",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                     }}
@@ -23644,9 +23290,14 @@ export default function App() {
                         e.currentTarget.style.background = "transparent"
                     }}
                   >
+                    <NavIcon id={item.id} />
                     {sidebarOpen && (
                       <span
-                        style={{ overflow: "hidden", textOverflow: "ellipsis" }}
+                        style={{
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
                       >
                         {item.label}
                       </span>

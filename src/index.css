@@ -1,14 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
 @import 'tailwindcss';
 
-html,
-body,
-#root {
-  height: 100%;
-  font-family: 'Inter', 'Arial', 'Helvetica Neue', sans-serif;
-}
-
-/* SAP Fiori design tokens */
+/* ── SAP Fiori Design Tokens ────────────────────────────────────────────────── */
 :root {
   --fiori-shell: #354A5E;
   --fiori-shell-text: #FFFFFF;
@@ -39,10 +32,19 @@ body,
   --fiori-shell-height: 48px;
 }
 
+/* ── Base Reset ─────────────────────────────────────────────────────────────── */
 * {
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+  font-family: 'Inter', 'Arial', 'Helvetica Neue', sans-serif;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -58,8 +60,164 @@ body,
   background: var(--fiori-text-3);
 }
 
+/* ── Enterprise Table Containment ───────────────────────────────────────────── */
+.fiori-table-wrap {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--fiori-border);
+  border-radius: 8px;
+  background: var(--fiori-card);
+}
+
+.fiori-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 700px;
+}
+
+.fiori-table-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--fiori-page-bg);
+}
+
+/* Global: any div that directly contains a table gets horizontal scroll */
+div:has(> table) {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Ensure tables inside cards don't overflow */
+table {
+  max-width: 100%;
+}
+
+/* Word-break for slide panels and modals to prevent text overflow */
+[style*="position: fixed"] {
+  word-break: break-word;
+}
+
+/* ── Card Overflow Protection ───────────────────────────────────────────────── */
+.fiori-card {
+  background: var(--fiori-card);
+  border: 1px solid var(--fiori-border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(15,23,42,0.05);
+}
+
+.fiori-card-body {
+  padding: 20px 24px;
+}
+
+/* ── Text Truncation Utility ────────────────────────────────────────────────── */
+.fiori-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* ── KPI Ribbon ─────────────────────────────────────────────────────────────── */
+.admin-kpi-ribbon {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.admin-kpi-ribbon > * {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── Dashboard Layout ───────────────────────────────────────────────────────── */
+.admin-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Primary Analytics (Chart + Sidebar) ────────────────────────────────────── */
+.admin-primary-analytics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.admin-primary-analytics > * {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── Secondary Analytics (3 cols) ───────────────────────────────────────────── */
+.admin-secondary-analytics {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr 1fr;
+}
+
+.admin-secondary-analytics > * {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── Responsive: Tablet ─────────────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .admin-primary-analytics {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-primary-analytics > :nth-child(2) {
+    border-left: 0 !important;
+    border-top: 1px solid #d5dadd;
+  }
+
+  .admin-secondary-analytics {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .admin-secondary-analytics > :last-child {
+    grid-column: 1 / -1;
+    border-left: 0 !important;
+    border-top: 1px solid #d5dadd;
+  }
+}
+
+/* ── Responsive: Mobile ─────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .admin-dashboard {
+    gap: 12px !important;
+  }
+
+  .admin-kpi-ribbon,
+  .admin-secondary-analytics {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .admin-kpi-ribbon > *,
+  .admin-secondary-analytics > * {
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid #d5dadd;
+  }
+
+  .admin-secondary-analytics > :last-child {
+    grid-column: auto;
+  }
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────────── */
 @keyframes dashShimmer {
   0% { opacity: 0.45; }
   50% { opacity: 0.8; }
   100% { opacity: 0.45; }
+}
+
+@keyframes fiori-fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fiori-fade-in {
+  animation: fiori-fadeIn 0.25s ease-out;
 }
