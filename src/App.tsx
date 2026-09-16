@@ -312,6 +312,7 @@ interface OrgDocument {
   createdOn: string
   status: "Draft" | "Published"
   description: string
+  fileName?: string
 }
 interface SalaryComponent {
   id: string
@@ -337,6 +338,7 @@ interface Organization {
   status: OrgStatus
   employees: number
   admin: string
+  adminEmail?: string
 }
 
 const INIT_SS: SalaryStructure[] = [
@@ -1057,7 +1059,15 @@ const iSt: React.CSSProperties = {
 function Fld({ label, children }: { label: string children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <label style={{ fontSize: 12, fontWeight: 500, color: F.text2 }}>
+      <label
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: F.text2,
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+        }}
+      >
         {label}
       </label>
       {children}
@@ -1160,25 +1170,32 @@ function PH({
   return (
     <div
       style={{
+        background: F.card,
+        border: `1px solid ${F.border}`,
+        borderRadius: 8,
+        padding: "18px 22px",
         display: "flex",
         justifyContent: "space-between",
-        alignItems: "flex-start",
-        marginBottom: 20,
+        alignItems: "center",
+        gap: 16,
+        flexWrap: "wrap",
+        marginBottom: 18,
+        boxShadow: "0 1px 4px rgba(15,23,42,0.06)",
       }}
     >
-      <div>
+      <div style={{ minWidth: 0 }}>
         <h1
-          style={{ margin: 0, fontSize: 19, fontWeight: 700, color: F.text1 }}
+          style={{ margin: 0, fontSize: 23, fontWeight: 900, color: F.text1, lineHeight: 1.15 }}
         >
           {title}
         </h1>
         {sub && (
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
+          <p style={{ margin: "6px 0 0", fontSize: 13, color: F.text2, lineHeight: 1.45 }}>
             {sub}
           </p>
         )}
       </div>
-      {action}
+      {action && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>{action}</div>}
     </div>
   )
 }
@@ -2789,6 +2806,18 @@ function DashboardView({
       color: DEPT_COLORS[i % DEPT_COLORS.length],
     }
   })
+  const readinessTrend = months.slice(-7).map((run) => ({
+    label: run.period.slice(0, 3),
+    value: isFinalizedPayrun(run.status)
+      ? 100
+      : run.status === "Approved"
+        ? 86
+        : run.status === "Under Review"
+          ? 72
+          : run.status === "Calculated"
+            ? 58
+            : 35,
+  }))
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -2995,6 +3024,71 @@ function DashboardView({
           progress={Math.min(100, Math.round(deductionRate * 4))}
           onClick={() => onNav("salary")}
         />
+      </div>
+
+      <div
+        className="org-dashboard-chart-row"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1.35fr) minmax(320px, 0.9fr)",
+          gap: 20,
+        }}
+      >
+        <section style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 12,
+              marginBottom: 10,
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+                Payroll Readiness Trend
+              </h2>
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: F.text2 }}>
+                Line chart showing payroll approval readiness across recent cycles
+              </p>
+            </div>
+            <Badge
+              label={`${payrollReadiness}% ready`}
+              color={payrollReadiness >= 85 ? F.success : F.warning}
+              bg={payrollReadiness >= 85 ? F.successBg : F.warningBg}
+            />
+          </div>
+          <ProductAdminLineChart data={readinessTrend} suffix="%" color={F.brand} />
+        </section>
+
+        <section style={cardStyle}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              gap: 12,
+              marginBottom: 14,
+            }}
+          >
+            <div>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+                Employee Status Mix
+              </h2>
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: F.text2 }}>
+                Donut chart by active, leave, and inactive workforce status
+              </p>
+            </div>
+            <Badge label={`${emps.length} employees`} color={F.brand} bg={F.infoBg} />
+          </div>
+          <AnalyticsDonutChart
+            segments={statusSegs}
+            size={150}
+            strokeWidth={24}
+            centerLabel="Employees"
+            valueFormatter={(value) => String(value)}
+          />
+        </section>
       </div>
 
       {/* ── Main Analytics Section: Dual Bar Trend + Donut Breakdown ── */}
@@ -7617,7 +7711,7 @@ function SalaryManagementView({
                 Employee Salary Calculations
               </span>
               <span style={{ marginLeft: 8, fontSize: 12, color: F.text2 }}>
-                Click Trace to inspect how salary was calculated for each employee
+                Click Edit to review and adjust salary calculation details for each employee
               </span>
             </div>
             <div
@@ -7638,7 +7732,7 @@ function SalaryManagementView({
                     <Th right>Gross Earnings</Th>
                     <Th right>Deductions</Th>
                     <Th right>Net Payout</Th>
-                    <Th>Trace Status</Th>
+                    <Th>Review Status</Th>
                     <Th>Audit & Payslip</Th>
                   </tr>
                 </thead>
@@ -7669,7 +7763,7 @@ function SalaryManagementView({
                       <Td>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <Btn small variant="secondary" onClick={() => setTraceRow(row)}>
-                            Trace
+                            Edit
                           </Btn>
                           <Btn
                             small
@@ -8567,7 +8661,7 @@ function SalaryManagementView({
 
       {traceRow && (
         <Modal
-          title={`Calculation Trace - ${traceRow.emp.name}`}
+          title={`Edit Calculation - ${traceRow.emp.name}`}
           onClose={() => setTraceRow(null)}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -9089,6 +9183,19 @@ function PayRunsView({
     }
     return payrollEligibleEmployees
   })()
+  const guidedPreviewRows = calcRows(guidedTargetEmployees, ss)
+  const guidedPreviewGross = guidedPreviewRows.reduce((sum, row) => sum + row.totalEarnings, 0)
+  const guidedPreviewDeductions = guidedPreviewRows.reduce((sum, row) => sum + row.totalDeductions, 0)
+  const guidedPreviewNet = guidedPreviewRows.reduce((sum, row) => sum + row.netSalary, 0)
+  const guidedScopeLabel = runScope === "Department Batch" ? "Department Payroll" : runScope
+  const guidedScopeDetail =
+    runScope === "Department Batch"
+      ? runSelectedIds[0]
+        ? `${runSelectedIds[0]} department payroll batch`
+        : "Select a department to preview this payroll batch"
+      : runScope === "Specific Employees"
+        ? `${runSelectedIds.length} selected employee${runSelectedIds.length !== 1 ? "s" : ""}`
+        : "Full organization payroll batch"
 
   const f4Periods = Array.from(new Set(payruns.map((p) => p.period)))
   const availableYears = Array.from(new Set(payruns.map((p) => String(p.year)))).sort().reverse()
@@ -9355,40 +9462,18 @@ function PayRunsView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {/* Page Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 12,
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 22,
-              fontWeight: 800,
-              color: F.text1,
-              letterSpacing: "-0.01em",
-            }}
-          >
-            Payroll & Pay Runs
-          </h1>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
-            Execute, verify, approve, and disburse monthly employee compensation
-          </p>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <PH
+        title="Payroll & Pay Runs"
+        sub="Execute, verify, approve, and disburse monthly employee compensation"
+        action={
+          <>
           <Btn onClick={() => setShowNewModal(true)}>Execute Guided Payroll Run</Btn>
           <Btn variant="success" onClick={handleExportBankBatch}>
             Export
           </Btn>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* 4 KPI Summary Cards */}
       <div
@@ -9677,7 +9762,7 @@ function PayRunsView({
                     Employee Payroll Calculations - {activeRun.period}
                   </h2>
                   <div style={{ fontSize: 12, color: F.text2, marginTop: 2 }}>
-                    Click Trace to inspect the calculation path, or Edit to adjust LOP, bonus, tax withholdings, or custom additions
+                    Click Edit to adjust LOP, bonus, tax withholdings, or custom additions
                   </div>
                 </div>
                 {prBadge(activeRun.status)}
@@ -9754,7 +9839,7 @@ function PayRunsView({
                               variant="secondary"
                               onClick={() => {
                                 if (activeRun.status === "Locked") {
-                                  toast(`Calculation trace opened for ${row.empName}. This locked run is read-only.`, "info")
+                                  toast(`Salary row opened for ${row.empName}. This locked run is read-only.`, "info")
                                   return
                                 }
                                 setEditingRow({
@@ -9768,7 +9853,7 @@ function PayRunsView({
                                 })
                               }}
                             >
-                              Trace
+                              Edit
                             </Btn>
                             <Btn
                               small
@@ -10245,6 +10330,7 @@ function PayRunsView({
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
                     {(["All Employees", "Specific Employees", "Department Batch"] as const).map((scope) => {
                       const active = runScope === scope
+                      const scopeLabel = scope === "Department Batch" ? "Department Payroll" : scope
                       return (
                         <button
                           key={scope}
@@ -10264,13 +10350,13 @@ function PayRunsView({
                             transition: "border-color 0.14s ease, background 0.14s ease, box-shadow 0.14s ease",
                           }}
                         >
-                          <div style={{ fontSize: 14, fontWeight: 900, color: F.text1 }}>{scope}</div>
+                          <div style={{ fontSize: 14, fontWeight: 900, color: F.text1 }}>{scopeLabel}</div>
                           <div style={{ fontSize: 12, color: F.text2, marginTop: 6, lineHeight: 1.35 }}>
                             {scope === "All Employees"
                               ? "Full organization monthly batch"
                               : scope === "Specific Employees"
                                 ? "Off-cycle or selective staff"
-                                : "Single department group"}
+                                : "Single department payroll run"}
                           </div>
                         </button>
                       )
@@ -10373,6 +10459,66 @@ function PayRunsView({
                   />
                 </Fld>
 
+                <div
+                  style={{
+                    border: `1px solid ${F.border}`,
+                    borderRadius: 8,
+                    background: F.pageBg,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      borderBottom: `1px solid ${F.border}`,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: F.text1 }}>
+                        Payroll Run Summary
+                      </div>
+                      <div style={{ marginTop: 2, fontSize: 12, color: F.text2 }}>
+                        {guidedScopeLabel} - {guidedScopeDetail}
+                      </div>
+                    </div>
+                    <Badge
+                      label={`${guidedTargetEmployees.length} employee${guidedTargetEmployees.length !== 1 ? "s" : ""}`}
+                      color={guidedTargetEmployees.length > 0 ? F.success : F.warning}
+                      bg={guidedTargetEmployees.length > 0 ? F.successBg : F.warningBg}
+                    />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+                    {[
+                      ["Scope", guidedScopeLabel],
+                      ["Gross Payroll", inr(guidedPreviewGross)],
+                      ["Deductions", inr(guidedPreviewDeductions)],
+                      ["Net Payable", inr(guidedPreviewNet)],
+                    ].map(([label, value], index) => (
+                      <div
+                        key={label}
+                        style={{
+                          padding: "13px 16px",
+                          borderLeft: index === 0 ? "none" : `1px solid ${F.border}`,
+                          background: F.card,
+                          minWidth: 0,
+                        }}
+                      >
+                        <div style={{ fontSize: 11, fontWeight: 800, color: F.text3, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                          {label}
+                        </div>
+                        <div style={{ marginTop: 5, fontSize: 14, fontWeight: 900, color: label === "Net Payable" ? F.success : F.text1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {value}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
                   <Btn variant="secondary" onClick={() => setShowNewModal(false)}>
                     Cancel
@@ -10386,8 +10532,9 @@ function PayRunsView({
                   Step 2: Verify statutory and salary inputs
                 </div>
                 <div style={{ background: F.pageBg, border: `1px solid ${F.border}`, borderRadius: 8, padding: 18, display: "flex", flexDirection: "column", gap: 10 }}>
-                  <IR label="Run Target" value={`${runScope} (${guidedTargetEmployees.length} staff)`} />
+                  <IR label="Run Target" value={`${guidedScopeLabel} (${guidedTargetEmployees.length} staff)`} />
                   <IR label="Disbursement Date" value={`${newYear}-${String(newMonth).padStart(2, "0")}-28`} />
+                  <IR label="Net Payable" value={inr(guidedPreviewNet)} />
                   <IR label="Statutory Deductions Engine" value="EPF, ESI, Professional Tax and TDS active" />
                   <IR label="Run Note" value={runNote || "No note added"} />
                 </div>
@@ -11530,40 +11677,18 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {/* Page Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: 12,
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 22,
-              fontWeight: 800,
-              color: F.text1,
-              letterSpacing: "-0.01em",
-            }}
-          >
-            Access Management & Roles
-          </h1>
-          <p style={{ margin: "4px 0 0", fontSize: 13, color: F.text2 }}>
-            Configure user accounts, role assignments, and security permissions
-          </p>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <PH
+        title="Access Management & Roles"
+        sub="Configure user accounts, role assignments, and security permissions"
+        action={
+          <>
           <Btn onClick={() => setShowAdd(true)}>+ Add User</Btn>
           <Btn variant="secondary" onClick={() => toast("User roster exported", "info")}>
-            Export Roster
+            Download User List
           </Btn>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* 4 KPI Summary Cards */}
       <div
@@ -12217,7 +12342,7 @@ function AuditHistoryView({
             </Fld>
           </>
         )}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", gridColumn: "1 / -1" }}>
           <Btn onClick={applyFilters}>Go</Btn>
           <Btn variant="secondary" onClick={clearFilters}>Clear Filters</Btn>
         </div>
@@ -12232,7 +12357,7 @@ function AuditHistoryView({
         style={{
           background: F.card,
           border: `1px solid ${F.border}`,
-          borderRadius: 4,
+          borderRadius: 8,
           overflow: "hidden",
         }}
       >
@@ -12313,7 +12438,7 @@ function AuditHistoryView({
           style={{
             background: F.card,
             border: `1px solid ${F.border}`,
-            borderRadius: 4,
+            borderRadius: 8,
             overflow: "hidden",
           }}
         >
@@ -12421,21 +12546,24 @@ function PlatformDashboard({
   })
   const totalEmployees = orgs.reduce((sum, o) => sum + o.employees, 0)
   const active = orgs.filter((o) => o.status === "Active").length
+  const draft = orgs.filter((o) => o.status === "Draft").length
+  const inactive = orgs.filter((o) => o.status === "Inactive").length
+  const suspended = orgs.filter((o) => o.status === "Suspended").length
   const statusSegments = [
     { label: "Active", value: active, color: F.success },
     {
       label: "Draft",
-      value: orgs.filter((o) => o.status === "Draft").length,
+      value: draft,
       color: F.brand,
     },
     {
       label: "Inactive",
-      value: orgs.filter((o) => o.status === "Inactive").length,
+      value: inactive,
       color: F.warning,
     },
     {
       label: "Suspended",
-      value: orgs.filter((o) => o.status === "Suspended").length,
+      value: suspended,
       color: F.error,
     },
   ].filter((x) => x.value > 0)
@@ -12450,6 +12578,28 @@ function PlatformDashboard({
 
   const growthPct = 8.7
   const activeRatio = orgs.length > 0 ? Math.round((active / orgs.length) * 100) : 100
+  const employeeDistribution = [...orgs]
+    .sort((a, b) => b.employees - a.employees)
+    .map((org, index) => ({
+      label: org.code,
+      sub: org.name,
+      value: org.employees,
+      color: index === 0 ? F.brand : org.status === "Active" ? F.success : org.status === "Draft" ? F.warning : F.text3,
+    }))
+  const activationTrend = [
+    { label: "Mar", value: 58 },
+    { label: "Apr", value: 62 },
+    { label: "May", value: 67 },
+    { label: "Jun", value: 67 },
+    { label: "Jul", value: 70 },
+    { label: "Aug", value: 72 },
+    { label: "Sep", value: activeRatio },
+  ]
+  const adminSecuritySegments = [
+    { label: "MFA Enabled", value: 3, color: F.success },
+    { label: "MFA Required", value: 1, color: F.warning },
+    { label: "Locked", value: 1, color: F.error },
+  ]
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -12553,8 +12703,6 @@ function PlatformDashboard({
               <span>&bull;</span>
               <span>Naxpayroll Global Control Center</span>
               <span>&bull;</span>
-              <span>Multi-Tenant Root</span>
-              <span>&bull;</span>
               <span style={{ color: F.text3 }}>ID: PLT-ADM-01</span>
             </div>
           </div>
@@ -12568,27 +12716,6 @@ function PlatformDashboard({
             flexWrap: "wrap",
           }}
         >
-          <div
-            style={{
-              textAlign: "right",
-              paddingRight: 12,
-              borderRight: `1px solid ${F.border}`,
-            }}
-          >
-            <div style={{ fontSize: 11, fontWeight: 700, color: F.text3 }}>
-              SYSTEM STATUS
-            </div>
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 800,
-                color: F.success,
-                marginTop: 2,
-              }}
-            >
-              All Services Healthy
-            </div>
-          </div>
           <Btn
             onClick={() => onNav("orgs")}
             style={{
@@ -12812,7 +12939,72 @@ function PlatformDashboard({
               {orgs.length} Total
             </span>
           </div>
-          <AnalyticsDonutChart segments={statusSegments} />
+          <AnalyticsDonutChart
+            segments={statusSegments}
+            centerLabel="Total Orgs"
+            valueFormatter={(value) => String(value)}
+          />
+        </section>
+      </div>
+
+      <div
+        className="product-admin-insights"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr) minmax(320px, 0.9fr)",
+          gap: 20,
+        }}
+      >
+        <section style={cardStyle}>
+          <div style={{ marginBottom: 14 }}>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+              Workforce by Organization
+            </h2>
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: F.text2 }}>
+              Bar chart showing employee distribution across tenants
+            </p>
+          </div>
+          <ProductAdminBarChart
+            data={employeeDistribution}
+            valueLabel={(value) => `${value} employees`}
+          />
+        </section>
+
+        <section style={cardStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 10 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+                Workspace Activation Trend
+              </h2>
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: F.text2 }}>
+                Line chart of active workspace percentage
+              </p>
+            </div>
+            <Badge
+              label={`${activeRatio}% active`}
+              color={activeRatio >= 70 ? F.success : F.warning}
+              bg={activeRatio >= 70 ? F.successBg : F.warningBg}
+            />
+          </div>
+          <ProductAdminLineChart data={activationTrend} suffix="%" color={F.success} />
+        </section>
+
+        <section style={cardStyle}>
+          <div style={{ marginBottom: 14 }}>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: F.text1 }}>
+              Admin Security Coverage
+            </h2>
+            <p style={{ margin: "4px 0 0", fontSize: 12, color: F.text2 }}>
+              Donut chart for product admin MFA and lock status
+            </p>
+          </div>
+          <AnalyticsDonutChart
+            segments={adminSecuritySegments}
+            size={150}
+            strokeWidth={24}
+            centerLabel="Admin Checks"
+            valueFormatter={(value) => String(value)}
+          />
         </section>
       </div>
 
@@ -12986,13 +13178,17 @@ function PlatformAccessManagementView({
 }) {
   const toast = useToast()
   const [selectedOrgId, setSelectedOrgId] = useState(orgs[0]?.id ?? "")
-  const [accessTab, setAccessTab] = useState<"tenant" | "admins" | "activity">("tenant")
+  const [accessTab, setAccessTab] = useState<"organizations" | "tenant" | "admins" | "activity">("organizations")
   const [orgSearchDraft, setOrgSearchDraft] = useState("")
   const [orgStatusDraft, setOrgStatusDraft] = useState("All")
+  const [orgAdminDraft, setOrgAdminDraft] = useState("All")
+  const [orgFyDraft, setOrgFyDraft] = useState("All")
   const [orgSortDraft, setOrgSortDraft] = useState("name-asc")
   const [orgFilters, setOrgFilters] = useState({
     search: "",
     status: "All",
+    admin: "All",
+    fy: "All",
     sort: "name-asc",
   })
   const [searchDraft, setSearchDraft] = useState("")
@@ -13094,6 +13290,12 @@ function PlatformAccessManagementView({
     ? Math.round((admins.filter((a) => a.mfa).length / admins.length) * 100)
     : 0
   const exposedTenants = orgs.filter((org) => orgControls[org.id]?.apiAccess).length
+  const orgAdminOptions = [
+    "All",
+    ...Array.from(new Set(orgs.map((org) => org.admin).filter((admin) => admin !== "-"))),
+    "Unassigned",
+  ]
+  const orgFyOptions = ["All", ...Array.from(new Set(orgs.map((org) => org.financialYear)))]
 
   const filteredOrgs = orgs
     .filter((org) => {
@@ -13101,6 +13303,9 @@ function PlatformAccessManagementView({
         return false
       }
       if (orgFilters.status !== "All" && org.status !== orgFilters.status) return false
+      if (orgFilters.admin === "Unassigned" && org.admin !== "-") return false
+      if (orgFilters.admin !== "All" && orgFilters.admin !== "Unassigned" && org.admin !== orgFilters.admin) return false
+      if (orgFilters.fy !== "All" && org.financialYear !== orgFilters.fy) return false
       return true
     })
     .sort((a, b) => {
@@ -13261,36 +13466,24 @@ function PlatformAccessManagementView({
 
   return (
     <div className="platform-access-view" style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-      <div
-        style={{
-          background: F.card,
-          border: `1px solid ${F.border}`,
-          borderRadius: 8,
-          padding: "18px 22px",
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 16,
-          alignItems: "center",
-          boxShadow: "0 1px 4px rgba(15,23,42,0.06)",
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0, fontSize: 23, fontWeight: 900, color: F.text1 }}>
-            Product Admin Access Control
-          </h1>
-          <p style={{ margin: "5px 0 0", fontSize: 13, color: F.text2 }}>
-            Manage platform admins, tenant permissions, MFA, API access, and organization status.
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+      <PH
+        title="Product Admin Access Control"
+        sub="Manage platform admins, tenant permissions, MFA, API access, and organization status."
+        action={
           <Btn variant="secondary" onClick={() => toast("Access matrix exported", "success")}>
             Export Matrix
           </Btn>
-          <Btn onClick={() => setShowInvite(true)}>+ Invite Admin</Btn>
-        </div>
-      </div>
+        }
+      />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+      <div
+        className="platform-access-kpis"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(150px, 1fr))",
+          gap: 10,
+        }}
+      >
         {[
           { l: "Active Organizations", v: `${activeOrgs}/${orgs.length}`, s: "Tenant workspaces online", c: F.success },
           { l: "Platform Admins", v: String(admins.length), s: `${lockedAdmins} locked account${lockedAdmins !== 1 ? "s" : ""}`, c: F.brand },
@@ -13304,19 +13497,41 @@ function PlatformAccessManagementView({
               border: `1px solid ${F.border}`,
               borderTop: `3px solid ${item.c}`,
               borderRadius: 8,
-              padding: "15px 16px",
+              padding: "10px 14px",
+              minHeight: 92,
             }}
           >
             <div style={{ fontSize: 11, color: F.text3, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.06em" }}>
               {item.l}
             </div>
-            <div style={{ marginTop: 9, fontSize: 25, fontWeight: 900, color: F.text1 }}>{item.v}</div>
-            <div style={{ marginTop: 4, fontSize: 12, color: F.text2 }}>{item.s}</div>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900, color: F.text1, lineHeight: 1.05 }}>{item.v}</div>
+            <div style={{ marginTop: 3, fontSize: 12, color: F.text2 }}>{item.s}</div>
           </div>
         ))}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+        <div
+          style={{
+            background: F.card,
+            border: `1px solid ${F.border}`,
+            borderRadius: 8,
+            padding: "12px 18px 0",
+          }}
+        >
+          <TabBar
+            tabs={[
+              { id: "organizations", label: "Organizations" },
+              { id: "tenant", label: "Tenant Access" },
+              { id: "admins", label: "Product Admins" },
+              { id: "activity", label: "Activity" },
+            ]}
+            active={accessTab}
+            onSelect={(id) => setAccessTab(id as typeof accessTab)}
+          />
+        </div>
+
+        {accessTab === "organizations" && (
         <div
           style={{
             background: F.card,
@@ -13355,20 +13570,20 @@ function PlatformAccessManagementView({
               padding: "14px 18px",
               borderBottom: `1px solid ${F.border}`,
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1fr) auto",
-              gap: 16,
+              gridTemplateColumns: "minmax(0, 1fr)",
+              gap: 10,
               alignItems: "end",
               background: F.card,
             }}
           >
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(260px, 1.4fr) minmax(145px, 0.7fr) minmax(170px, 0.8fr)",
-                gap: 10,
-                alignItems: "end",
-                minWidth: 0,
-              }}
+              display: "grid",
+              gridTemplateColumns: "minmax(260px, 1.3fr) repeat(4, minmax(130px, 0.7fr)) auto auto",
+              gap: 10,
+              alignItems: "end",
+              minWidth: 0,
+            }}
             >
               <Fld label="Search Organizations">
                 <input
@@ -13387,6 +13602,20 @@ function PlatformAccessManagementView({
                   <option>Suspended</option>
                 </select>
               </Fld>
+              <Fld label="Administrator">
+                <select value={orgAdminDraft} onChange={(e) => setOrgAdminDraft(e.target.value)} style={iSt}>
+                  {orgAdminOptions.map((admin) => (
+                    <option key={admin}>{admin}</option>
+                  ))}
+                </select>
+              </Fld>
+              <Fld label="Financial Year">
+                <select value={orgFyDraft} onChange={(e) => setOrgFyDraft(e.target.value)} style={iSt}>
+                  {orgFyOptions.map((fy) => (
+                    <option key={fy}>{fy}</option>
+                  ))}
+                </select>
+              </Fld>
               <Fld label="Sort">
                 <select value={orgSortDraft} onChange={(e) => setOrgSortDraft(e.target.value)} style={iSt}>
                   <option value="name-asc">Name A-Z</option>
@@ -13397,18 +13626,30 @@ function PlatformAccessManagementView({
                   <option value="status-asc">Status A-Z</option>
                 </select>
               </Fld>
-            </div>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", alignItems: "end", flexWrap: "wrap" }}>
-              <Btn onClick={() => setOrgFilters({ search: orgSearchDraft, status: orgStatusDraft, sort: orgSortDraft })}>
+              <Btn
+                style={{ alignSelf: "end", justifyContent: "center" }}
+                onClick={() =>
+                  setOrgFilters({
+                    search: orgSearchDraft,
+                    status: orgStatusDraft,
+                    admin: orgAdminDraft,
+                    fy: orgFyDraft,
+                    sort: orgSortDraft,
+                  })
+                }
+              >
                 Go
               </Btn>
               <Btn
                 variant="secondary"
+                style={{ alignSelf: "end", justifyContent: "center", whiteSpace: "nowrap" }}
                 onClick={() => {
                   setOrgSearchDraft("")
                   setOrgStatusDraft("All")
+                  setOrgAdminDraft("All")
+                  setOrgFyDraft("All")
                   setOrgSortDraft("name-asc")
-                  setOrgFilters({ search: "", status: "All", sort: "name-asc" })
+                  setOrgFilters({ search: "", status: "All", admin: "All", fy: "All", sort: "name-asc" })
                 }}
               >
                 Clear Filters
@@ -13426,12 +13667,13 @@ function PlatformAccessManagementView({
                   <Th>Financial Year</Th>
                   <Th right>Employees</Th>
                   <Th>Status</Th>
+                  <Th right>Action</Th>
                 </tr>
               </thead>
               <tbody>
                 {filteredOrgs.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ padding: 42, textAlign: "center", color: F.text3 }}>
+                    <td colSpan={8} style={{ padding: 42, textAlign: "center", color: F.text3 }}>
                       No organizations match the applied filters.
                     </td>
                   </tr>
@@ -13440,10 +13682,13 @@ function PlatformAccessManagementView({
                   return (
                     <tr
                       key={org.id}
+                      onClick={() => setSelectedOrgId(org.id)}
+                      title={`Select ${org.name}`}
                       style={{
                         borderBottom: `1px solid ${F.border}`,
                         background: selected ? F.infoBg : F.card,
                         boxShadow: selected ? `inset 3px 0 0 ${F.brand}` : undefined,
+                        cursor: "pointer",
                       }}
                     >
                       <Td style={{ whiteSpace: "normal", maxWidth: 340 }}>
@@ -13456,10 +13701,27 @@ function PlatformAccessManagementView({
                       </Td>
                       <Td mono>{org.id}</Td>
                       <Td>{org.code}</Td>
-                      <Td>{org.admin}</Td>
+                      <Td>
+                        <span style={{ color: org.admin === "-" ? F.text3 : F.text1, fontStyle: org.admin === "-" ? "italic" : undefined }}>
+                          {org.admin === "-" ? "Unassigned" : org.admin}
+                        </span>
+                      </Td>
                       <Td>{org.financialYear}</Td>
                       <Td right>{org.employees}</Td>
                       <Td>{orgBadge(org.status)}</Td>
+                      <Td right>
+                        <Btn
+                          small
+                          variant={selected ? "secondary" : "primary"}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setSelectedOrgId(org.id)
+                            setAccessTab("tenant")
+                          }}
+                        >
+                          {selected ? "Open Access" : "View Access"}
+                        </Btn>
+                      </Td>
                     </tr>
                   )
                 })}
@@ -13467,26 +13729,7 @@ function PlatformAccessManagementView({
             </table>
           </div>
         </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
-          <div
-            style={{
-              background: F.card,
-              border: `1px solid ${F.border}`,
-              borderRadius: 8,
-              padding: "14px 18px 0",
-            }}
-          >
-            <TabBar
-              tabs={[
-                { id: "tenant", label: "Tenant Access" },
-                { id: "admins", label: "Product Admins" },
-                { id: "activity", label: "Activity" },
-              ]}
-              active={accessTab}
-              onSelect={(id) => setAccessTab(id as typeof accessTab)}
-            />
-          </div>
+        )}
 
           {accessTab === "tenant" && selectedOrg && (
             <div
@@ -13497,6 +13740,89 @@ function PlatformAccessManagementView({
                 overflow: "hidden",
               }}
             >
+              <div
+                style={{
+                  padding: 18,
+                  borderBottom: `1px solid ${F.border}`,
+                  background: F.pageBg,
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 900, color: F.text1 }}>Tenant Workspaces</div>
+                    <div style={{ marginTop: 2, fontSize: 12, color: F.text2 }}>
+                      Select an organization to review status and platform access permissions.
+                    </div>
+                  </div>
+                  <Fld label="Quick Select">
+                    <select
+                      value={selectedOrg.id}
+                      onChange={(e) => setSelectedOrgId(e.target.value)}
+                      style={{ ...iSt, minWidth: 260 }}
+                    >
+                      {orgs.map((org) => (
+                        <option key={org.id} value={org.id}>
+                          {org.name} - {org.status}
+                        </option>
+                      ))}
+                    </select>
+                  </Fld>
+                </div>
+                <div className="fiori-table-wrap" style={{ borderRadius: 6 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 880 }}>
+                    <thead>
+                      <tr>
+                        <Th>Organization</Th>
+                        <Th>Tenant ID</Th>
+                        <Th>Admin</Th>
+                        <Th right>Employees</Th>
+                        <Th>Status</Th>
+                        <Th right>Action</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orgs.map((org) => {
+                        const selected = org.id === selectedOrg.id
+                        return (
+                          <tr
+                            key={org.id}
+                            style={{
+                              borderBottom: `1px solid ${F.border}`,
+                              background: selected ? F.infoBg : F.card,
+                              boxShadow: selected ? `inset 3px 0 0 ${F.brand}` : undefined,
+                            }}
+                          >
+                            <Td style={{ whiteSpace: "normal", maxWidth: 320 }}>
+                              <div style={{ fontWeight: 900, color: selected ? F.brand : F.text1 }}>{org.name}</div>
+                              <div style={{ marginTop: 2, fontSize: 11, color: F.text3 }}>{org.code} · {org.legalName}</div>
+                            </Td>
+                            <Td mono>{org.id}</Td>
+                            <Td>
+                              <span style={{ color: org.admin === "-" ? F.text3 : F.text1, fontStyle: org.admin === "-" ? "italic" : undefined }}>
+                                {org.admin === "-" ? "Unassigned" : org.admin}
+                              </span>
+                            </Td>
+                            <Td right>{org.employees}</Td>
+                            <Td>{orgBadge(org.status)}</Td>
+                            <Td right>
+                              <Btn
+                                small
+                                variant={selected ? "secondary" : "primary"}
+                                disabled={selected}
+                                onClick={() => setSelectedOrgId(org.id)}
+                              >
+                                {selected ? "Selected" : "View Access"}
+                              </Btn>
+                            </Td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
               <div
                 style={{
                   padding: "17px 20px",
@@ -13776,33 +14102,64 @@ function PlatformAccessManagementView({
               background: F.card,
               border: `1px solid ${F.border}`,
               borderRadius: 8,
-              padding: "15px 18px",
+              overflow: "hidden",
             }}
           >
-            <div style={{ fontSize: 14, fontWeight: 900, color: F.text1, marginBottom: 10 }}>
-              Recent Access Activity
-            </div>
-            <div style={{ display: "grid", gap: 8 }}>
-              {activity.map((item, index) => (
-                <div
-                  key={`${item}-${index}`}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "10px 1fr",
-                    gap: 10,
-                    alignItems: "center",
-                    color: F.text2,
-                    fontSize: 12,
-                  }}
-                >
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: index === 0 ? F.brand : F.border }} />
-                  <span>{item}</span>
+            <div
+              style={{
+                padding: "14px 18px",
+                borderBottom: `1px solid ${F.border}`,
+                background: F.pageBg,
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 900, color: F.text1 }}>Recent Access Activity</div>
+                <div style={{ marginTop: 2, fontSize: 12, color: F.text2 }}>
+                  Latest tenant, permission, and administrator changes.
                 </div>
-              ))}
+              </div>
+              <Badge label={`${activity.length} events`} color={F.brand} bg={F.infoBg} />
             </div>
-          </div>
+            <div className="fiori-table-wrap" style={{ border: "none", borderRadius: 0 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 840 }}>
+                <thead>
+                  <tr>
+                    <Th>Time</Th>
+                    <Th>Activity</Th>
+                    <Th>Scope</Th>
+                    <Th>Status</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.map((item, index) => {
+                    const scope = orgs.find((org) => item.includes(org.name))?.name ?? (item.includes("MFA") ? "Product admins" : "Platform")
+                    return (
+                      <tr key={`${item}-${index}`} style={{ borderBottom: `1px solid ${F.border}` }}>
+                        <Td style={{ color: F.text2 }}>{index === 0 ? "Just now" : `${index + 1} updates ago`}</Td>
+                        <Td style={{ whiteSpace: "normal", maxWidth: 520 }}>
+                          <div style={{ fontWeight: 800, color: F.text1 }}>{item}</div>
+                        </Td>
+                        <Td>{scope}</Td>
+                        <Td>
+                          <Badge
+                            label={index === 0 ? "Latest" : "Logged"}
+                            color={index === 0 ? F.brand : F.text2}
+                            bg={index === 0 ? F.infoBg : F.pageBg}
+                          />
+                        </Td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            </div>
           )}
-        </div>
       </div>
 
       {showInvite && (
@@ -13880,6 +14237,10 @@ function OrganizationsView({
     country: "India",
     currency: "INR",
     financialYear: "April-March",
+    admin: "",
+    adminEmail: "",
+    employees: 0,
+    status: "Draft" as OrgStatus,
   })
   const [search, setSearch] = useState("")
   const [status, setStatus] = useState("")
@@ -13910,10 +14271,16 @@ function OrganizationsView({
       return toast("Name and code are required", "error")
     const o: Organization = {
       id: `ORG-${String(orgs.length + 1).padStart(3, "0")}`,
-      ...form,
-      status: "Draft",
-      employees: 0,
-      admin: "-",
+      name: form.name.trim(),
+      code: form.code.trim().toUpperCase(),
+      legalName: form.legalName.trim() || form.name.trim(),
+      country: form.country,
+      currency: form.currency,
+      financialYear: form.financialYear,
+      status: form.status,
+      employees: Math.max(0, Number(form.employees) || 0),
+      admin: form.admin.trim() || "-",
+      adminEmail: form.adminEmail.trim() || undefined,
     }
     setOrgs([...orgs, o])
     setShowAdd(false)
@@ -13924,6 +14291,10 @@ function OrganizationsView({
       country: "India",
       currency: "INR",
       financialYear: "April-March",
+      admin: "",
+      adminEmail: "",
+      employees: 0,
+      status: "Draft",
     })
     toast(`Organization "${o.name}" created`, "success")
   }
@@ -14131,18 +14502,6 @@ function OrganizationsView({
                 <option value="country-asc">Country A-Z</option>
               </select>
             </Fld>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                paddingBottom: 2,
-              }}
-            >
-              <Btn small variant="ghost" onClick={resetFilters}>
-                Clear filters
-              </Btn>
-            </div>
           </div>
         )}
       </div>
@@ -14315,8 +14674,15 @@ function OrganizationsView({
                           Unassigned
                         </span>
                       ) : (
-                        <span style={{ color: F.text1, fontWeight: 500 }}>
-                          {org.admin}
+                        <span>
+                          <span style={{ color: F.text1, fontWeight: 500 }}>
+                            {org.admin}
+                          </span>
+                          {org.adminEmail && (
+                            <div style={{ fontSize: 11, color: F.text3, marginTop: 3 }}>
+                              {org.adminEmail}
+                            </div>
+                          )}
                         </span>
                       )}
                     </Td>
@@ -14405,74 +14771,163 @@ function OrganizationsView({
         </div>
       </div>
       {showAdd && (
-        <Modal title="Create Organization" onClose={() => setShowAdd(false)}>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
-          >
-            <Fld label="Organization Name *">
-              <input
-                style={iSt}
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Acme Corp Pvt. Ltd."
-              />
-            </Fld>
-            <Fld label="Org Code *">
-              <input
-                style={iSt}
-                value={form.code}
-                onChange={(e) =>
-                  setForm({ ...form, code: e.target.value.toUpperCase() })
-                }
-                placeholder="e.g. ACM"
-              />
-            </Fld>
-            <Fld label="Legal Name">
-              <input
-                style={iSt}
-                value={form.legalName}
-                onChange={(e) =>
-                  setForm({ ...form, legalName: e.target.value })
-                }
-              />
-            </Fld>
-            <Fld label="Country">
-              <select
-                style={iSt}
-                value={form.country}
-                onChange={(e) => setForm({ ...form, country: e.target.value })}
-              >
-                <option>India</option>
-                <option>USA</option>
-                <option>UK</option>
-                <option>Singapore</option>
-              </select>
-            </Fld>
-            <Fld label="Currency">
-              <select
-                style={iSt}
-                value={form.currency}
-                onChange={(e) => setForm({ ...form, currency: e.target.value })}
-              >
-                <option>INR</option>
-                <option>USD</option>
-                <option>GBP</option>
-                <option>SGD</option>
-              </select>
-            </Fld>
-            <Fld label="Financial Year">
-              <select
-                style={iSt}
-                value={form.financialYear}
-                onChange={(e) =>
-                  setForm({ ...form, financialYear: e.target.value })
-                }
-              >
-                <option>April-March</option>
-                <option>January-December</option>
-                <option>July-June</option>
-              </select>
-            </Fld>
+        <Modal title="Create Organization" onClose={() => setShowAdd(false)} wide>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: F.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+                Organization Details
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <Fld label="Organization Name *">
+                  <input
+                    style={iSt}
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="e.g. Acme Corp Pvt. Ltd."
+                  />
+                </Fld>
+                <Fld label="Org Code *">
+                  <input
+                    style={iSt}
+                    value={form.code}
+                    onChange={(e) =>
+                      setForm({ ...form, code: e.target.value.toUpperCase() })
+                    }
+                    placeholder="e.g. ACM"
+                  />
+                </Fld>
+                <Fld label="Legal Name">
+                  <input
+                    style={iSt}
+                    value={form.legalName}
+                    onChange={(e) =>
+                      setForm({ ...form, legalName: e.target.value })
+                    }
+                    placeholder="Registered legal entity name"
+                  />
+                </Fld>
+                <Fld label="Launch Status">
+                  <select
+                    style={iSt}
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value as OrgStatus })}
+                  >
+                    <option>Draft</option>
+                    <option>Active</option>
+                    <option>Inactive</option>
+                    <option>Suspended</option>
+                  </select>
+                </Fld>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: F.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+                Workspace Settings
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                <Fld label="Country">
+                  <select
+                    style={iSt}
+                    value={form.country}
+                    onChange={(e) => setForm({ ...form, country: e.target.value })}
+                  >
+                    <option>India</option>
+                    <option>USA</option>
+                    <option>UK</option>
+                    <option>Singapore</option>
+                  </select>
+                </Fld>
+                <Fld label="Currency">
+                  <select
+                    style={iSt}
+                    value={form.currency}
+                    onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                  >
+                    <option>INR</option>
+                    <option>USD</option>
+                    <option>GBP</option>
+                    <option>SGD</option>
+                  </select>
+                </Fld>
+                <Fld label="Financial Year">
+                  <select
+                    style={iSt}
+                    value={form.financialYear}
+                    onChange={(e) =>
+                      setForm({ ...form, financialYear: e.target.value })
+                    }
+                  >
+                    <option>April-March</option>
+                    <option>January-December</option>
+                    <option>July-June</option>
+                  </select>
+                </Fld>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: F.text2, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+                Admin Setup
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 180px", gap: 12 }}>
+                <Fld label="Organization Admin">
+                  <input
+                    style={iSt}
+                    value={form.admin}
+                    onChange={(e) => setForm({ ...form, admin: e.target.value })}
+                    placeholder="e.g. Rohan Gupta"
+                  />
+                </Fld>
+                <Fld label="Admin Email">
+                  <input
+                    style={iSt}
+                    type="email"
+                    value={form.adminEmail}
+                    onChange={(e) => setForm({ ...form, adminEmail: e.target.value })}
+                    placeholder="admin@company.com"
+                  />
+                </Fld>
+                <Fld label="Initial Employees">
+                  <input
+                    style={iSt}
+                    type="number"
+                    min={0}
+                    value={form.employees}
+                    onChange={(e) => setForm({ ...form, employees: Number(e.target.value) })}
+                    placeholder="0"
+                  />
+                </Fld>
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: `1px solid ${F.border}`,
+                borderRadius: 8,
+                background: F.pageBg,
+                padding: "12px 14px",
+                display: "grid",
+                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                gap: 12,
+              }}
+            >
+              {[
+                ["Status", form.status],
+                ["Admin", form.admin.trim() || "Unassigned"],
+                ["Currency", form.currency],
+                ["Employees", String(form.employees || 0)],
+              ].map(([label, value]) => (
+                <div key={label} style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: F.text3, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    {label}
+                  </div>
+                  <div style={{ marginTop: 4, fontSize: 13, fontWeight: 900, color: F.text1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {value}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           <div
             style={{
@@ -17935,10 +18390,14 @@ function AnalyticsDonutChart({
   segments,
   size = 170,
   strokeWidth = 28,
+  valueFormatter = inr,
+  centerLabel = "Total Gross",
 }: {
   segments: { label: string; value: number; color: string }[]
   size?: number
   strokeWidth?: number
+  valueFormatter?: (value: number) => string
+  centerLabel?: string
 }) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
   const total = segments.reduce((s, seg) => s + seg.value, 0)
@@ -18061,7 +18520,7 @@ function AnalyticsDonutChart({
                   marginTop: 2,
                 }}
               >
-                {inr(activeSeg.value)}
+                {valueFormatter(activeSeg.value)}
               </div>
               <div
                 style={{
@@ -18084,7 +18543,7 @@ function AnalyticsDonutChart({
                   letterSpacing: "0.04em",
                 }}
               >
-                Total Gross
+                {centerLabel}
               </div>
               <div
                 style={{
@@ -18094,7 +18553,7 @@ function AnalyticsDonutChart({
                   marginTop: 2,
                 }}
               >
-                {inr(total)}
+                {valueFormatter(total)}
               </div>
               <div
                 style={{
@@ -18167,7 +18626,7 @@ function AnalyticsDonutChart({
                     color: F.text1,
                   }}
                 >
-                  {inr(seg.value)}
+                  {valueFormatter(seg.value)}
                 </span>
                 <span
                   style={{
@@ -18184,6 +18643,121 @@ function AnalyticsDonutChart({
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+function ProductAdminBarChart({
+  data,
+  valueLabel = (value) => String(value),
+}: {
+  data: { label: string; sub?: string; value: number; color?: string }[]
+  valueLabel?: (value: number) => string
+}) {
+  const max = Math.max(...data.map((item) => item.value), 1)
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      {data.map((item) => {
+        const pct = Math.round((item.value / max) * 100)
+        return (
+          <div key={item.label}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                alignItems: "baseline",
+                marginBottom: 5,
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: F.text1 }}>
+                  {item.label}
+                </div>
+                {item.sub && (
+                  <div style={{ marginTop: 1, fontSize: 11, color: F.text3 }}>
+                    {item.sub}
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: F.text1 }}>
+                {valueLabel(item.value)}
+              </div>
+            </div>
+            <div style={{ height: 10, borderRadius: 999, background: F.pageBg, overflow: "hidden" }}>
+              <div
+                style={{
+                  width: `${pct}%`,
+                  height: "100%",
+                  borderRadius: 999,
+                  background: item.color ?? F.brand,
+                }}
+              />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ProductAdminLineChart({
+  data,
+  color = F.brand,
+  suffix = "",
+}: {
+  data: { label: string; value: number }[]
+  color?: string
+  suffix?: string
+}) {
+  const width = 520
+  const height = 190
+  const padX = 34
+  const padY = 24
+  const max = Math.max(...data.map((item) => item.value), 1)
+  const min = Math.min(...data.map((item) => item.value), 0)
+  const range = Math.max(max - min, 1)
+  const points = data.map((item, index) => {
+    const x = padX + (index / Math.max(data.length - 1, 1)) * (width - padX * 2)
+    const y = height - padY - ((item.value - min) / range) * (height - padY * 2)
+    return { ...item, x, y }
+  })
+  const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ")
+  const area = `${path} L ${points[points.length - 1]?.x ?? padX} ${height - padY} L ${padX} ${height - padY} Z`
+
+  return (
+    <div>
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
+        {[0, 0.5, 1].map((tick) => {
+          const y = padY + tick * (height - padY * 2)
+          return (
+            <line
+              key={tick}
+              x1={padX}
+              x2={width - padX}
+              y1={y}
+              y2={y}
+              stroke={F.border}
+              strokeDasharray="4 4"
+            />
+          )
+        })}
+        <path d={area} fill={color} opacity="0.08" />
+        <path d={path} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+        {points.map((point) => (
+          <g key={point.label}>
+            <circle cx={point.x} cy={point.y} r="4.5" fill={F.card} stroke={color} strokeWidth="3" />
+            <text x={point.x} y={point.y - 11} textAnchor="middle" fontSize="10" fontWeight="700" fill={F.text2}>
+              {point.value}{suffix}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", padding: "0 24px", fontSize: 11, color: F.text3, fontWeight: 700 }}>
+        {data.map((item) => (
+          <span key={item.label}>{item.label}</span>
+        ))}
       </div>
     </div>
   )
@@ -21492,6 +22066,7 @@ function OrgDocumentsView({
     assignmentValue: "",
     status: "Published" as OrgDocument["status"],
     description: "",
+    fileName: "",
   })
   const departments = Array.from(new Set(emps.map((e) => e.department))).sort()
   const designations = Array.from(new Set(emps.map((e) => e.designation))).sort()
@@ -21562,6 +22137,7 @@ function OrgDocumentsView({
         createdOn: new Date().toISOString().slice(0, 10),
         status: draft.status,
         description: draft.description.trim() || "Uploaded HR document for employee access.",
+        fileName: draft.fileName,
       },
       ...prev,
     ])
@@ -21573,6 +22149,7 @@ function OrgDocumentsView({
       assignmentValue: "",
       status: "Published",
       description: "",
+      fileName: "",
     })
     toast("Document added and assigned successfully", "success")
   }
@@ -21664,6 +22241,11 @@ function OrgDocumentsView({
                 <Td>
                   <div style={{ fontWeight: 800 }}>{doc.title}</div>
                   <div style={{ fontSize: 11, color: F.text3 }}>{doc.description}</div>
+                  {doc.fileName && (
+                    <div style={{ marginTop: 3, fontSize: 11, color: F.brand, fontWeight: 700 }}>
+                      File: {doc.fileName}
+                    </div>
+                  )}
                 </Td>
                 <Td><Badge label={doc.category} color={F.brand} bg={F.infoBg} /></Td>
                 <Td>{doc.assignedTo}</Td>
@@ -21717,6 +22299,59 @@ function OrgDocumentsView({
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <Fld label="Document Title">
               <input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} style={iSt} placeholder="e.g. Leave Policy FY 2026" />
+            </Fld>
+            <Fld label="Upload Document">
+              <label
+                style={{
+                  border: `1px dashed ${draft.fileName ? F.brand : F.border}`,
+                  borderRadius: 8,
+                  background: draft.fileName ? F.infoBg : F.pageBg,
+                  padding: "16px 18px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 14,
+                  cursor: "pointer",
+                }}
+              >
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 13, fontWeight: 900, color: F.text1 }}>
+                    {draft.fileName || "Choose a file to upload"}
+                  </span>
+                  <span style={{ display: "block", marginTop: 3, fontSize: 12, color: F.text2 }}>
+                    PDF, DOC, DOCX, XLSX, PNG, or JPG document
+                  </span>
+                </span>
+                <span
+                  style={{
+                    border: `1px solid ${F.border}`,
+                    borderRadius: 4,
+                    background: F.card,
+                    color: F.text1,
+                    fontSize: 12,
+                    fontWeight: 800,
+                    padding: "7px 12px",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Browse
+                </span>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    const inferredTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[_-]+/g, " ")
+                    setDraft({
+                      ...draft,
+                      fileName: file.name,
+                      title: draft.title.trim() ? draft.title : inferredTitle,
+                    })
+                  }}
+                  style={{ display: "none" }}
+                />
+              </label>
             </Fld>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <Fld label="Category">
