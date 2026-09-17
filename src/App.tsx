@@ -1201,6 +1201,20 @@ function PH({
 }
 
 type BtnVariant = "primary" | "secondary" | "danger" | "ghost" | "success"
+function Pagination({ page, pageSize, total, onPageChange }: { page: number; pageSize: number; total: number; onPageChange: (page: number) => void }) {
+  const pages = Math.max(1, Math.ceil(total / pageSize))
+  if (total <= pageSize) return null
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderTop: `1px solid ${F.border}`, fontSize: 12, color: F.text2 }}>
+      <span>Showing {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} of {total}</span>
+      <div style={{ display: "flex", gap: 6 }}>
+        <Btn small variant="secondary" disabled={page === 1} onClick={() => onPageChange(page - 1)}>Previous</Btn>
+        <span style={{ display: "flex", alignItems: "center", padding: "0 6px", fontWeight: 700 }}>Page {page} of {pages}</span>
+        <Btn small variant="secondary" disabled={page === pages} onClick={() => onPageChange(page + 1)}>Next</Btn>
+      </div>
+    </div>
+  )
+}
 function Btn({
   children,
   variant = "primary",
@@ -6011,6 +6025,8 @@ function EmployeesView({
   const [salMax, setSalMax] = useState("")
   const [dojYear, setDojYear] = useState("All")
   const [sortBy, setSortBy] = useState("name-asc")
+  const [employeePage, setEmployeePage] = useState(1)
+  const employeePageSize = 10
   const [appliedEmpFilters, setAppliedEmpFilters] = useState({
     search: "",
     deptF: "All",
@@ -6107,6 +6123,7 @@ function EmployeesView({
     (appliedEmpFilters.sortBy !== "name-asc" ? 1 : 0)
 
   const applyEmpFilters = () => {
+    setEmployeePage(1)
     setAppliedEmpFilters({
       search,
       deptF,
@@ -6121,6 +6138,7 @@ function EmployeesView({
     })
   }
   const clearEmpFilters = () => {
+    setEmployeePage(1)
     setSearch("")
     setDeptF("All")
     setStatusF("All")
@@ -6176,6 +6194,8 @@ function EmployeesView({
     }
     return a.name.localeCompare(b.name) * dir
   })
+
+  const paginatedEmployees = filtered.slice((employeePage - 1) * employeePageSize, employeePage * employeePageSize)
 
   const addEmployee = () => {
     if (!addForm.name || !addForm.email)
@@ -6759,7 +6779,7 @@ function EmployeesView({
                 </td>
               </tr>
             )}
-            {filtered.map((e) => (
+            {paginatedEmployees.map((e) => (
               <TrH
                 key={e.id}
                 onClick={() => setSubPage({ type: "detail", emp: e })}
@@ -6915,6 +6935,7 @@ function EmployeesView({
           </tbody>
         </table>
         </div>
+        <Pagination page={employeePage} pageSize={employeePageSize} total={filtered.length} onPageChange={setEmployeePage} />
       </div>
 
       {showAdd && (
@@ -9106,6 +9127,7 @@ function PayRunsView({
     payruns.find((p) => p.period === "August 2026")?.id || payruns[0]?.id || ""
   )
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(2) // 0: Attendance, 1: Additions, 2: Review, 3: Approval
+  const [historyPage, setHistoryPage] = useState(1)
 
   // History Filter Bar State (Draft + Applied)
   const [showHistoryFilterBar, setShowHistoryFilterBar] = useState(true)
@@ -9207,7 +9229,7 @@ function PayRunsView({
     setAppliedStatus(statusDraft)
     setAppliedMonth(monthDraft)
     setAppliedMinAmount(minAmountDraft)
-    toast("Payroll history filters applied", "info")
+    toast("Filters applied", "info")
   }
 
   // Handle Clear History Filters
@@ -10632,6 +10654,7 @@ function PayslipsView({
   const [netMax, setNetMax] = useState("")
   const [sortBy, setSortBy] = useState<"period" | "net" | "gross">("period")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+  const [payslipPage, setPayslipPage] = useState(1)
   const [appliedPayslipListFilters, setAppliedPayslipListFilters] = useState({
     empSearch: myEmp?.name ?? "",
     selPeriod: "All",
@@ -10674,6 +10697,8 @@ function PayslipsView({
         (!appliedPayslipListFilters.netMax || row.netSalary <= parseInt(appliedPayslipListFilters.netMax) * 1000)
       )
     })
+
+  const paginatedPayslipRows = rows.slice((payslipPage - 1) * 10, payslipPage * 10)
     .sort((a, b) => {
       let d = 0
       if (appliedPayslipListFilters.sortBy === "net") d = a.row.netSalary - b.row.netSalary
@@ -10689,6 +10714,7 @@ function PayslipsView({
     (!myEmp && activeSearch(appliedPayslipListFilters.empSearch) ? 1 : 0) +
     (appliedPayslipListFilters.sortBy !== "period" || appliedPayslipListFilters.sortDir !== "desc" ? 1 : 0)
   const applyPayslipFilters = () => {
+    setPayslipPage(1)
     setAppliedPayslipListFilters({
       empSearch,
       selPeriod,
@@ -10701,6 +10727,7 @@ function PayslipsView({
     })
   }
   const clearAll = () => {
+    setPayslipPage(1)
     setEmpSearch(myEmp?.name ?? "")
     setSelPeriod("All")
     setDeptF("All")
@@ -11074,7 +11101,7 @@ function PayslipsView({
                 </td>
               </tr>
             )}
-            {rows.map(({ row, run, emp: e }) => (
+                  {paginatedPayslipRows.map(({ row, run, emp: e }) => (
               <TrH
                 key={`${run.id}-${row.empId}`}
                 onClick={() => setViewSlip({ row, run })}
@@ -11160,6 +11187,7 @@ function PayslipsView({
           </tbody>
         </table>
       </div>
+      <Pagination page={payslipPage} pageSize={10} total={rows.length} onPageChange={setPayslipPage} />
       {viewSlip && (
         <Modal
           title={`Payslip - ${viewSlip.run.period}`}
@@ -11557,6 +11585,7 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
   const [statusDraft, setStatusDraft] = useState("all")
   const [deptDraft, setDeptDraft] = useState("all")
   const [scopeDraft, setScopeDraft] = useState("all")
+  const [userPage, setUserPage] = useState(1)
 
   const [appliedSearch, setAppliedSearch] = useState("")
   const [appliedRole, setAppliedRole] = useState("all")
@@ -11581,16 +11610,18 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
 
   // Execute filter search on "Go"
   const handleGo = () => {
+    setUserPage(1)
     setAppliedSearch(searchDraft)
     setAppliedRole(roleDraft)
     setAppliedStatus(statusDraft)
     setAppliedDept(deptDraft)
     setAppliedScope(scopeDraft)
-    toast("Filter parameters applied", "info")
+    toast("Filters applied", "info")
   }
 
   // Clear all filters
   const handleClear = () => {
+    setUserPage(1)
     setSearchDraft("")
     setRoleDraft("all")
     setStatusDraft("all")
@@ -11625,6 +11656,7 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
     }
     return true
   })
+  const paginatedUsers = filteredUsers.slice((userPage - 1) * 10, userPage * 10)
 
   const toggleLock = (u: UserRow) => {
     const next = u.status === "Active" ? "Locked" : "Active"
@@ -11747,7 +11779,11 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
           border: `1px solid ${F.border}`,
           borderRadius: 8,
           boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
-          overflow: "hidden",
+          // Let the value-help suggestions extend beyond the filter row.
+          // The filter panel stays above the results card while the menu is open.
+          overflow: "visible",
+          position: "relative",
+          zIndex: 2,
         }}
       >
         {/* Filter Bar Action Bar Header */}
@@ -11988,7 +12024,7 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((u) => (
+                paginatedUsers.map((u) => (
                   <tr
                     key={u.name}
                     style={{
@@ -12052,6 +12088,7 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
             </tbody>
           </table>
         </div>
+        <Pagination page={userPage} pageSize={10} total={filteredUsers.length} onPageChange={setUserPage} />
       </div>
 
       {/* Add User Modal */}
@@ -12156,6 +12193,7 @@ function AuditHistoryView({
 }) {
   const toast = useToast()
   const [tab, setTab] = useState<"audit" | "errors">("audit")
+  const [auditPage, setAuditPage] = useState(1)
   const [filterDraft, setFilterDraft] = useState({
     search: "",
     module: "All",
@@ -12192,6 +12230,8 @@ function AuditHistoryView({
       withinDate(a.timestamp) &&
       searchMatches(appliedFilters.search, [a.issue, a.user, a.module, a.route, a.status, a.severity]),
   )
+  const activeFilteredRows = tab === "audit" ? filtered : filteredErrors
+  const paginatedAuditRows = activeFilteredRows.slice((auditPage - 1) * 10, auditPage * 10)
   const clearFilters = () => {
     const empty = {
       search: "",
@@ -12207,6 +12247,7 @@ function AuditHistoryView({
     toast("Filters cleared", "info")
   }
   const applyFilters = () => {
+    setAuditPage(1)
     setAppliedFilters(filterDraft)
     toast("Filters applied", "success")
   }
@@ -12388,7 +12429,7 @@ function AuditHistoryView({
                 </td>
               </tr>
             )}
-            {filtered.map((a) => (
+            {filtered.slice((auditPage - 1) * 10, auditPage * 10).map((a) => (
               <TrH key={a.id}>
                 <Td mono>
                   <span style={{ fontSize: 11, color: F.text2 }}>
@@ -12469,7 +12510,7 @@ function AuditHistoryView({
                   </td>
                 </tr>
               )}
-              {filteredErrors.map((a) => (
+              {filteredErrors.slice((auditPage - 1) * 10, auditPage * 10).map((a) => (
                 <TrH key={a.id}>
                   <Td mono>
                     <span style={{ fontSize: 11, color: F.text2 }}>
@@ -12521,6 +12562,7 @@ function AuditHistoryView({
               ))}
             </tbody>
           </table>
+          <Pagination page={auditPage} pageSize={10} total={activeFilteredRows.length} onPageChange={setAuditPage} />
         </div>
       )}
     </div>
@@ -15178,6 +15220,9 @@ function UnifiedProfileView({
     relation: "Father",
     bio: "Senior Software Engineer focused on core backend payroll calculation engines, microservices orchestration, and tax algorithm compliance.",
   })
+  const countryCodes = ["+91", "+1", "+44", "+61", "+65", "+971"]
+  const [mobileCountryCode, setMobileCountryCode] = useState("+91")
+  const [emergencyCountryCode, setEmergencyCountryCode] = useState("+91")
 
   // Sync draft when persona changes
   useEffect(() => {
@@ -15198,9 +15243,29 @@ function UnifiedProfileView({
   const emailToValidate = persona === "employee" ? draftEmp.email : draftAdmin.email
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailToValidate)
 
+  const emergencyPhoneRaw = persona === "employee" ? empEmergency.phone : (draftAdmin.emergencyPhone ?? "")
+  const emergencyPhone = `${emergencyPhoneRaw.trim().startsWith("+") ? "+" : ""}${emergencyPhoneRaw.replace(/\D/g, "")}`
+  const emergencyName = persona === "employee" ? empEmergency.name : (draftAdmin.emergencyName ?? "")
+  const emergencyRelation = persona === "employee" ? empEmergency.relation : (draftAdmin.emergencyRelation ?? "")
+  const emergencyPhoneValid = /^\+?[0-9]{10,15}$/.test(emergencyPhone)
+  const emergencyTextValid = (value: string) => /^[A-Za-z ]*$/.test(value)
+
   const handleSaveProfile = () => {
     if (!emailValid) {
       toast("Please enter a valid email address", "error")
+      return
+    }
+    if (!emergencyPhoneValid) {
+      toast("Emergency phone must contain 10 digits, plus an optional country code", "error")
+      return
+    }
+    if (!emergencyTextValid(emergencyName) || !emergencyTextValid(emergencyRelation)) {
+      toast("Emergency contact name and relationship may contain letters and spaces only", "error")
+      return
+    }
+    const location = persona === "employee" ? draftEmp.location : draftAdmin.location
+    if (!emergencyTextValid(location)) {
+      toast("Work location / base office may contain letters and spaces only", "error")
       return
     }
     if (!phoneValid) {
@@ -16050,10 +16115,11 @@ function UnifiedProfileView({
                   }
                   readOnly={!editing}
                   onChange={(e) => {
+                    const value = e.target.value.replace(/[^A-Za-z ]/g, "")
                     if (persona === "employee") {
-                      setDraftEmp({ ...draftEmp, name: e.target.value })
+                      setDraftEmp({ ...draftEmp, name: value })
                     } else {
-                      setDraftAdmin({ ...draftAdmin, name: e.target.value })
+                      setDraftAdmin({ ...draftAdmin, name: value })
                     }
                   }}
                 />
@@ -16083,6 +16149,10 @@ function UnifiedProfileView({
               </Fld>
 
               <Fld label="Mobile Phone Number *">
+                <div style={{ display: "flex", gap: 8 }}>
+                <select value={mobileCountryCode} disabled={!editing} onChange={(e) => setMobileCountryCode(e.target.value)} style={{ ...iSt, width: 90 }}>
+                  {countryCodes.map((code) => <option key={code}>{code}</option>)}
+                </select>
                 <input
                   style={{
                     ...iSt,
@@ -16091,19 +16161,21 @@ function UnifiedProfileView({
                   }}
                   value={
                     persona === "employee"
-                      ? editing ? (draftEmp.mobile ?? "") : (emp.mobile ?? "")
-                      : editing ? draftAdmin.phone : adminProfiles[persona].phone
+                      ? editing ? (draftEmp.mobile ?? "").replace(/\D/g, "").slice(-10) : (emp.mobile ?? "")
+                      : editing ? draftAdmin.phone.replace(/\D/g, "").slice(-10) : adminProfiles[persona].phone
                   }
                   readOnly={!editing}
                   placeholder="+91 98765 43210"
                   onChange={(e) => {
+                    const value = `${mobileCountryCode}${e.target.value.replace(/\D/g, "").slice(0, 10)}`
                     if (persona === "employee") {
-                      setDraftEmp({ ...draftEmp, mobile: e.target.value })
+                      setDraftEmp({ ...draftEmp, mobile: value })
                     } else {
-                      setDraftAdmin({ ...draftAdmin, phone: e.target.value })
+                      setDraftAdmin({ ...draftAdmin, phone: value })
                     }
                   }}
                 />
+                </div>
                 {editing && !phoneValid && (
                   <span style={{ fontSize: 11, color: F.error }}>
                     Please enter a valid phone number with country code.
@@ -16125,10 +16197,11 @@ function UnifiedProfileView({
                   }
                   readOnly={!editing}
                   onChange={(e) => {
+                    const value = e.target.value.replace(/[^A-Za-z ]/g, "")
                     if (persona === "employee") {
-                      setDraftEmp({ ...draftEmp, location: e.target.value })
+                      setDraftEmp({ ...draftEmp, location: value })
                     } else {
-                      setDraftAdmin({ ...draftAdmin, location: e.target.value })
+                      setDraftAdmin({ ...draftAdmin, location: value })
                     }
                   }}
                 />
@@ -16358,10 +16431,11 @@ function UnifiedProfileView({
                   }
                   readOnly={!editing}
                   onChange={(e) => {
+                    const value = e.target.value.replace(/[^A-Za-z ]/g, "")
                     if (persona === "employee") {
-                      setEmpEmergency({ ...empEmergency, name: e.target.value })
+                      setEmpEmergency({ ...empEmergency, name: value })
                     } else {
-                      setDraftAdmin({ ...draftAdmin, emergencyName: e.target.value })
+                      setDraftAdmin({ ...draftAdmin, emergencyName: value })
                     }
                   }}
                 />
@@ -16382,15 +16456,20 @@ function UnifiedProfileView({
                   }
                   readOnly={!editing}
                   onChange={(e) => {
+                    const value = e.target.value.replace(/[^A-Za-z ]/g, "")
                     if (persona === "employee") {
-                      setEmpEmergency({ ...empEmergency, relation: e.target.value })
+                      setEmpEmergency({ ...empEmergency, relation: value })
                     } else {
-                      setDraftAdmin({ ...draftAdmin, emergencyRelation: e.target.value })
+                      setDraftAdmin({ ...draftAdmin, emergencyRelation: value })
                     }
                   }}
                 />
               </Fld>
               <Fld label="Emergency Phone">
+                <div style={{ display: "flex", gap: 8 }}>
+                <select value={emergencyCountryCode} disabled={!editing} onChange={(e) => setEmergencyCountryCode(e.target.value)} style={{ ...iSt, width: 90 }}>
+                  {countryCodes.map((code) => <option key={code}>{code}</option>)}
+                </select>
                 <input
                   style={{
                     ...iSt,
@@ -16399,20 +16478,23 @@ function UnifiedProfileView({
                   }}
                   value={
                     persona === "employee"
-                      ? empEmergency.phone
+                      ? editing ? empEmergency.phone.replace(/\D/g, "").slice(-10) : empEmergency.phone
                       : editing
-                        ? (draftAdmin.emergencyPhone ?? "")
+                        ? (draftAdmin.emergencyPhone ?? "").replace(/\D/g, "").slice(-10)
                         : (adminProfiles[persona].emergencyPhone ?? "")
                   }
                   readOnly={!editing}
                   onChange={(e) => {
+                    const raw = e.target.value
+                    const value = `${emergencyCountryCode}${raw.replace(/\D/g, "").slice(0, 10)}`
                     if (persona === "employee") {
-                      setEmpEmergency({ ...empEmergency, phone: e.target.value })
+                      setEmpEmergency({ ...empEmergency, phone: value })
                     } else {
-                      setDraftAdmin({ ...draftAdmin, emergencyPhone: e.target.value })
+                      setDraftAdmin({ ...draftAdmin, emergencyPhone: value })
                     }
                   }}
                 />
+                </div>
               </Fld>
             </div>
           </div>
@@ -22931,6 +23013,7 @@ function FinancialDataView({
   const toast = useToast()
   const [regime, setRegime] = useState("new")
   const [confirmModal, setConfirmModal] = useState(false)
+  const [declarationModal, setDeclarationModal] = useState(false)
   const [activeTab, setActiveTab] = useState<"regime" | "declarations" | "deductions">("regime")
 
   const latest = ownPayruns(payruns, emp.id)
@@ -23154,7 +23237,7 @@ function FinancialDataView({
                 Submit investment proofs to reduce TDS tax liability under Old Regime
               </div>
             </div>
-            <Btn small variant="secondary" onClick={() => toast("Declaration portal opened", "info")}>
+            <Btn small variant="secondary" onClick={() => setDeclarationModal(true)}>
               + Add New Declaration
             </Btn>
           </div>
@@ -23287,6 +23370,31 @@ function FinancialDataView({
       )}
 
       {/* Regime Confirmation Modal */}
+      {declarationModal && (
+        <Modal title="Add New Declaration" onClose={() => setDeclarationModal(false)}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Fld label="Section">
+              <select style={iSt} defaultValue="Sec 80C">
+                <option>Sec 80C</option>
+                <option>Sec 80D</option>
+                <option>Sec 24(b)</option>
+                <option>Sec 80CCD</option>
+              </select>
+            </Fld>
+            <Fld label="Investment Name">
+              <input style={iSt} placeholder="Enter investment name" />
+            </Fld>
+            <Fld label="Declared Amount">
+              <input style={iSt} type="number" min="0" placeholder="Enter amount" />
+            </Fld>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <Btn variant="secondary" onClick={() => setDeclarationModal(false)}>Cancel</Btn>
+              <Btn onClick={() => { setDeclarationModal(false); toast("Declaration submitted", "success") }}>Submit Declaration</Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {confirmModal && (
         <Modal title="Confirm Tax Regime Selection" onClose={() => setConfirmModal(false)}>
           <p style={{ color: F.text2, fontSize: 13, lineHeight: 1.5 }}>
