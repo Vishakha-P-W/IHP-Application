@@ -7496,10 +7496,18 @@ function SalaryManagementView({
     templateDraft.specialAllowance
   const templateAssignees = emps.filter((e) => {
     if (templateDraft.assignMode === "All Employees") return true
-    if (templateDraft.assignMode === "Team") return e.department === templateDraft.assignTarget
+    if (templateDraft.assignMode === "Team" || templateDraft.assignMode === "Department") {
+      return e.department === templateDraft.assignTarget
+    }
     if (templateDraft.assignMode === "Designation") return e.designation === templateDraft.assignTarget
     return false
   })
+  const templateDepartments = Array.from(
+    new Set(emps.map((e) => e.department.trim()).filter(Boolean)),
+  ).sort()
+  const templateDesignations = Array.from(
+    new Set(emps.map((e) => e.designation.trim()).filter(Boolean)),
+  ).sort()
   const createTemplate = () => {
     if (!templateDraft.name.trim()) return toast("Template name is required", "error")
     const structure: SalaryStructure = {
@@ -8119,7 +8127,7 @@ function SalaryManagementView({
                   >
                     <option>No Assignment</option>
                     <option>All Employees</option>
-                    <option>Team</option>
+                    <option>Department</option>
                     <option>Designation</option>
                   </select>
                 </Fld>
@@ -8131,11 +8139,11 @@ function SalaryManagementView({
                     style={iSt}
                   >
                     <option value="">Select target</option>
-                    {(templateDraft.assignMode === "Team"
-                      ? Array.from(new Set(emps.map((e) => e.department))).sort()
-                      : Array.from(new Set(emps.map((e) => e.designation))).sort()
+                    {(templateDraft.assignMode === "Department"
+                      ? templateDepartments
+                      : templateDesignations
                     ).map((item) => (
-                      <option key={item}>{item}</option>
+                      <option key={item} value={item}>{item}</option>
                     ))}
                   </select>
                 </Fld>
@@ -15180,11 +15188,27 @@ function UnifiedProfileView({
   const [showPws, setShowPws] = useState(false)
 
   // Preferences state
-  const [notifEmailPayroll, setNotifEmailPayroll] = useState(true)
-  const [notifEmailSecurity, setNotifEmailSecurity] = useState(true)
-  const [notifEmailReports, setNotifEmailReports] = useState(true)
-  const [notifInAppAlerts, setNotifInAppAlerts] = useState(true)
-  const [notifSound, setNotifSound] = useState(false)
+  const preferenceKey = `naxpayroll-preferences-${persona}`
+  const savedPreferences = (() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(preferenceKey) || "null") as Record<string, boolean> | null
+    } catch {
+      return null
+    }
+  })()
+  const [notifEmailPayroll, setNotifEmailPayroll] = useState(savedPreferences?.emailPayroll ?? true)
+  const [notifEmailSecurity, setNotifEmailSecurity] = useState(savedPreferences?.emailSecurity ?? true)
+  const [notifEmailReports, setNotifEmailReports] = useState(savedPreferences?.emailReports ?? true)
+  const [notifInAppAlerts, setNotifInAppAlerts] = useState(savedPreferences?.inAppAlerts ?? true)
+  const [notifSound, setNotifSound] = useState(savedPreferences?.sound ?? false)
+  useEffect(() => {
+    const next = savedPreferences
+    setNotifEmailPayroll(next?.emailPayroll ?? true)
+    setNotifEmailSecurity(next?.emailSecurity ?? true)
+    setNotifEmailReports(next?.emailReports ?? true)
+    setNotifInAppAlerts(next?.inAppAlerts ?? true)
+    setNotifSound(next?.sound ?? false)
+  }, [persona])
 
   // Active sessions state
   const [sessions, setSessions] = useState([
@@ -15515,25 +15539,6 @@ function UnifiedProfileView({
             </>
           ) : (
             <>
-              <Btn
-                variant="secondary"
-                onClick={() => setChangePwModal(true)}
-              >
-                <svg
-                  width="13"
-                  height="13"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                </svg>
-                <span>Change Password</span>
-              </Btn>
               <Btn variant="primary" onClick={() => setEditing(true)}>
                 <svg
                   width="13"
@@ -17231,31 +17236,26 @@ function UnifiedProfileView({
             </div>
           </div>
 
-          {/* Regional Formats Card */}
           <div
             style={{
-              background: F.card,
-              border: `1px solid ${F.border}`,
-              borderRadius: 6,
-              padding: 18,
+              paddingTop: 2,
               display: "flex",
-              justifyContent: "space-between",
+              justifyContent: "flex-end",
               alignItems: "center",
               flexWrap: "wrap",
               gap: 12,
             }}
           >
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: F.text1 }}>
-                Display Formats & Currency
-              </div>
-              <div style={{ fontSize: 11, color: F.text2, marginTop: 2 }}>
-                Currency: INR (₹) • Date Format: DD/MM/YYYY • Numbers: Indian numbering standard (Lakhs / Crores)
-              </div>
-            </div>
             <Btn
               onClick={() => {
-                toast("Platform preferences saved successfully", "success")
+                sessionStorage.setItem(preferenceKey, JSON.stringify({
+                  emailPayroll: notifEmailPayroll,
+                  emailSecurity: notifEmailSecurity,
+                  emailReports: notifEmailReports,
+                  inAppAlerts: notifInAppAlerts,
+                  sound: notifSound,
+                }))
+                toast("Preferences updated successfully.", "success")
               }}
             >
               Save Preferences
@@ -17436,10 +17436,13 @@ const INIT_NOTIFS: NotifItem[] = [
 
 function NotificationBell({
   showToast,
+  onNavigate,
 }: {
   showToast: (msg: string, type?: ToastType) => void
+  onNavigate: (view: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const [notifs, setNotifs] = useState<NotifItem[]>(INIT_NOTIFS)
   const unread = notifs.filter((n) => !n.read).length
 
@@ -17526,6 +17529,13 @@ function NotificationBell({
   }
   const markRead = (id: number) =>
     setNotifs(notifs.map((n) => (n.id === id ? { ...n, read: true } : n)))
+  const openNotification = (n: NotifItem) => {
+    markRead(n.id)
+    setOpen(false)
+    setShowAll(false)
+    const view = n.module === "Employees" ? "employees" : n.module === "Salary" ? "salary" : n.module === "Access" ? "access" : "payruns"
+    onNavigate(view)
+  }
 
   return (
     <div style={{ position: "relative", flexShrink: 0 }}>
@@ -17712,7 +17722,7 @@ function NotificationBell({
                 return (
                   <div
                     key={n.id}
-                    onClick={() => markRead(n.id)}
+                    onClick={() => openNotification(n)}
                     style={{
                       display: "flex",
                       gap: 12,
@@ -17848,7 +17858,7 @@ function NotificationBell({
                 <button
                   onClick={() => {
                     setOpen(false)
-                    showToast("Viewing all notifications", "info")
+                    setShowAll(true)
                   }}
                   style={{
                     background: "none",
@@ -17866,6 +17876,24 @@ function NotificationBell({
             )}
           </div>
         </>
+      )}
+      {showAll && (
+        <Modal title={`All Notifications (${notifs.length})`} onClose={() => setShowAll(false)} wide>
+          <div style={{ maxHeight: 520, overflowY: "auto" }}>
+            {notifs.length === 0 ? (
+              <div style={{ padding: 36, textAlign: "center", color: F.text3 }}>No notifications</div>
+            ) : notifs.map((n) => (
+              <div key={n.id} onClick={() => openNotification(n)} style={{ display: "flex", gap: 12, padding: "14px 4px", borderBottom: `1px solid ${F.border}`, background: n.read ? "transparent" : F.infoBg, cursor: "pointer" }}>
+                <div style={{ color: moduleColor[n.module] ?? F.brand, flexShrink: 0 }}>{moduleIcon[n.module]}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: F.text1 }}>{n.msg}</div>
+                  <div style={{ fontSize: 11, color: F.text3, marginTop: 5 }}>{n.time}</div>
+                </div>
+                {!n.read && <Badge label="Unread" color={F.brand} bg={F.infoBg} />}
+              </div>
+            ))}
+          </div>
+        </Modal>
       )}
     </div>
   )
@@ -22150,8 +22178,12 @@ function OrgDocumentsView({
     description: "",
     fileName: "",
   })
-  const departments = Array.from(new Set(emps.map((e) => e.department))).sort()
-  const designations = Array.from(new Set(emps.map((e) => e.designation))).sort()
+  const departments = Array.from(
+    new Set(emps.map((e) => e.department.trim()).filter(Boolean)),
+  ).sort()
+  const designations = Array.from(
+    new Set(emps.map((e) => e.designation.trim()).filter(Boolean)),
+  ).sort()
   const categories: OrgDocument["category"][] = [
     "Policy",
     "Payroll",
@@ -22467,7 +22499,7 @@ function OrgDocumentsView({
                 >
                   <option value="">Select target</option>
                   {(draft.assignmentMode === "Department" ? departments : designations).map((item) => (
-                    <option key={item}>{item}</option>
+                    <option key={item} value={item}>{item}</option>
                   ))}
                 </select>
               </Fld>
@@ -24136,7 +24168,7 @@ export default function App() {
           </div>
           <div style={{ flex: 1 }} />
           <LiveClock />
-          <NotificationBell showToast={showToast} />
+          <NotificationBell showToast={showToast} onNavigate={setView} />
           <ProfileMenu
             persona={persona}
             onProfile={() => setView("profile")}
