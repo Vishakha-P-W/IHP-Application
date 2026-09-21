@@ -118,13 +118,28 @@ function DateRangeFilter({
   onApply: () => void
 }) {
   return (
-    <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 8, padding: "10px 12px", marginBottom: 14, display: "flex", alignItems: "end", gap: 10, flexWrap: "wrap" }}>
-      <div style={{ fontSize: 12, fontWeight: 800, color: F.text2, paddingBottom: 9 }}>Record date</div>
+    <div style={{ padding: "0", marginBottom: 0, display: "flex", alignItems: "end", gap: 8, flexWrap: "nowrap", whiteSpace: "nowrap" }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: F.text2, padding: "0 4px 9px 0" }}>Record date</div>
       <label style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>From<input aria-label="Filter from date" type="date" value={from} onChange={(event) => onFromChange(event.target.value)} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
       <label style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>To<input aria-label="Filter to date" type="date" value={to} onChange={(event) => onToChange(event.target.value)} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
-      <Btn small onClick={onApply}>Apply range</Btn>
+      <Btn small onClick={onApply} style={{ height: 34, padding: "0 14px" }}>Apply range</Btn>
     </div>
   )
+}
+
+const DateFilterCtx = createContext<{
+  active: boolean
+  from: string
+  to: string
+  onFromChange: (value: string) => void
+  onToChange: (value: string) => void
+  onApply: () => void
+} | null>(null)
+
+function ContextDateRangeFilter() {
+  const dateFilter = useContext(DateFilterCtx)
+  if (!dateFilter?.active) return null
+  return <DateRangeFilter from={dateFilter.from} to={dateFilter.to} onFromChange={dateFilter.onFromChange} onToChange={dateFilter.onToChange} onApply={dateFilter.onApply} />
 }
 
 function AdminWorkspaceHero({
@@ -6242,6 +6257,19 @@ function EmployeesView({
   const [bulkAction, setBulkAction] = useState("export_payslips")
   const [bulkReason, setBulkReason] = useState("")
   const [bulkStructure, setBulkStructure] = useState(ss[0]?.name ?? "")
+  const [showColumnManager, setShowColumnManager] = useState(false)
+  const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null)
+  const [employeeColumns, setEmployeeColumns] = useState([
+    { id: "employee", label: "Employee", visible: true },
+    { id: "department", label: "Department", visible: true },
+    { id: "designation", label: "Designation", visible: true },
+    { id: "type", label: "Employment Type", visible: true },
+    { id: "location", label: "Location", visible: true },
+    { id: "salary", label: "Gross Salary", visible: true },
+    { id: "joined", label: "Joined", visible: true },
+    { id: "status", label: "Status", visible: true },
+    { id: "actions", label: "Actions", visible: true },
+  ])
 
   // When employee list changes, refresh the selected employee if viewing detail
   const selEmp =
@@ -6391,6 +6419,39 @@ function EmployeesView({
     setSelectedEmployeeIds([])
     setBulkReason("")
   }
+  const visibleEmployeeColumns = employeeColumns.filter((column) => column.visible)
+  const moveEmployeeColumn = (id: string, direction: -1 | 1) => setEmployeeColumns((columns) => {
+    const index = columns.findIndex((column) => column.id === id)
+    const nextIndex = index + direction
+    if (index < 0 || nextIndex < 0 || nextIndex >= columns.length) return columns
+    const next = [...columns]
+    ;[next[index], next[nextIndex]] = [next[nextIndex], next[index]]
+    return next
+  })
+  const dropEmployeeColumn = (targetId: string) => {
+    if (!draggedColumnId || draggedColumnId === targetId) return setDraggedColumnId(null)
+    setEmployeeColumns((columns) => {
+      const from = columns.findIndex((column) => column.id === draggedColumnId)
+      const to = columns.findIndex((column) => column.id === targetId)
+      if (from < 0 || to < 0) return columns
+      const next = [...columns]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+    setDraggedColumnId(null)
+  }
+  const employeeCell = (employee: Employee, columnId: string) => {
+    if (columnId === "employee") return <div><strong style={{ color: F.brand }}>{employee.name}</strong><div style={{ fontSize: 11, color: F.text3 }}>{employee.id} · {employee.designation}</div></div>
+    if (columnId === "department") return employee.department
+    if (columnId === "designation") return employee.designation
+    if (columnId === "type") return <Badge label={employee.empType} color={employee.empType === "Contract" ? F.warning : F.brand} bg={employee.empType === "Contract" ? F.warningBg : F.infoBg} />
+    if (columnId === "location") return employee.location
+    if (columnId === "salary") return <strong>{inr(employee.grossSalary)}</strong>
+    if (columnId === "joined") return fmtD(employee.doj)
+    if (columnId === "status") return empBadge(employee.status)
+    return <div style={{ display: "flex", gap: 5 }} onClick={(event) => event.stopPropagation()}><Btn small variant="secondary" onClick={() => setSubPage({ type: "detail", emp: employee })}>View</Btn><Btn small variant={employee.status === "Active" ? "danger" : "success"} onClick={() => toggleStatus(employee)}>{employee.status === "Active" ? "Deactivate" : "Activate"}</Btn></div>
+  }
 
   const addEmployee = () => {
     if (!addForm.name || !addForm.email)
@@ -6464,6 +6525,9 @@ function EmployeesView({
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
               Export CSV
+            </Btn>
+            <Btn variant="secondary" onClick={() => setShowColumnManager(!showColumnManager)}>
+              ↔ Customize columns
             </Btn>
             <Btn
               variant="secondary"
@@ -6946,9 +7010,19 @@ function EmployeesView({
         </div>
       )}
 
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10, position: "relative" }}>
+        <Btn small variant="secondary" onClick={() => setShowColumnManager(!showColumnManager)}>☷ Columns</Btn>
+        {showColumnManager && <div style={{ position: "absolute", top: 34, right: 0, zIndex: 5, width: 330, background: F.card, border: `1px solid ${F.border}`, borderRadius: 8, padding: 12, boxShadow: "0 8px 24px rgba(15,23,42,0.18)" }}><div style={{ fontSize: 13, fontWeight: 800, marginBottom: 8 }}>Table columns</div><div style={{ fontSize: 11, color: F.text2, marginBottom: 10 }}>Drag the ⠿ handle to rearrange. Check columns to show or hide them.</div>{employeeColumns.map((column) => <div key={column.id} draggable onDragStart={() => setDraggedColumnId(column.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => dropEmployeeColumn(column.id)} onDragEnd={() => setDraggedColumnId(null)} style={{ display: "grid", gridTemplateColumns: "18px 22px 1fr", alignItems: "center", gap: 7, padding: "8px 4px", borderRadius: 5, cursor: "grab", background: draggedColumnId === column.id ? F.infoBg : "transparent", border: `1px solid ${draggedColumnId === column.id ? F.brand : "transparent"}` }}><span title="Drag to rearrange" style={{ color: F.text3, fontSize: 16, letterSpacing: -2 }}>⠿</span><input type="checkbox" checked={column.visible} onClick={(event) => event.stopPropagation()} onChange={() => setEmployeeColumns(employeeColumns.map((item) => item.id === column.id ? { ...item, visible: !item.visible } : item))} /><span style={{ fontSize: 12, fontWeight: 600 }}>{column.label}</span></div>)}</div>}
+      </div>
+
+      <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 8, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", minWidth: 850 }}><thead><tr><Th><input aria-label="Select visible employees" type="checkbox" checked={allVisibleSelected} onChange={toggleVisibleSelection} /></Th>{visibleEmployeeColumns.map((column) => <Th key={column.id} right={column.id === "salary"}>{column.label}</Th>)}</tr></thead><tbody>{paginatedEmployees.map((employee) => <TrH key={employee.id} onClick={() => setSubPage({ type: "detail", emp: employee })}><Td><input aria-label={`Select ${employee.name}`} type="checkbox" checked={selectedEmployeeIds.includes(employee.id)} onClick={(event) => event.stopPropagation()} onChange={() => setSelectedEmployeeIds(selectedEmployeeIds.includes(employee.id) ? selectedEmployeeIds.filter((id) => id !== employee.id) : [...selectedEmployeeIds, employee.id])} /></Td>{visibleEmployeeColumns.map((column) => <Td key={column.id} right={column.id === "salary"}>{employeeCell(employee, column.id)}</Td>)}</TrH>)}</tbody></table></div>
+        <Pagination page={employeePage} pageSize={employeePageSize} total={filtered.length} onPageChange={setEmployeePage} />
+      </div>
+
       <div
         style={{
-          background: F.card,
+          display: "none", background: F.card,
           border: `1px solid ${F.border}`,
           borderRadius: 8,
           overflow: "hidden",
@@ -9360,6 +9434,8 @@ function PayRunsView({
   )
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(2) // 0: Attendance, 1: Additions, 2: Review, 3: Approval
   const [historyPage, setHistoryPage] = useState(1)
+  const [calculationPage, setCalculationPage] = useState(1)
+  const calculationPageSize = 5
 
   // History Filter Bar State (Draft + Applied)
   const [showHistoryFilterBar, setShowHistoryFilterBar] = useState(true)
@@ -9402,6 +9478,11 @@ function PayRunsView({
   } | null>(null)
 
   const activeRun = payruns.find((p) => p.id === activeRunId) || payruns[0]
+  const calculationRows = activeRun?.rows ?? []
+  const paginatedCalculationRows = calculationRows.slice(
+    (calculationPage - 1) * calculationPageSize,
+    calculationPage * calculationPageSize,
+  )
   const payrunWorkflowSteps = [
     "Draft",
     "Calculated",
@@ -9666,6 +9747,7 @@ function PayRunsView({
 
     setPayruns([newPr, ...payruns])
     setActiveRunId(newPr.id)
+    setCalculationPage(1)
     setShowNewModal(false)
     setGuidedRunStep(1)
     setRunSelectedIds([])
@@ -9852,7 +9934,10 @@ function PayRunsView({
                 </span>
                 <select
                   value={activeRun?.id}
-                  onChange={(e) => setActiveRunId(e.target.value)}
+                  onChange={(e) => {
+                    setActiveRunId(e.target.value)
+                    setCalculationPage(1)
+                  }}
                   style={{
                     ...iSt,
                     width: 240,
@@ -10048,7 +10133,7 @@ function PayRunsView({
                     </tr>
                   </thead>
                   <tbody>
-                    {activeRun.rows.map((row) => (
+                    {paginatedCalculationRows.map((row) => (
                       <tr
                         key={row.empId}
                         style={{
@@ -10141,6 +10226,12 @@ function PayRunsView({
                   </tfoot>
                 </table>
               </div>
+              <Pagination
+                page={calculationPage}
+                pageSize={calculationPageSize}
+                total={calculationRows.length}
+                onPageChange={setCalculationPage}
+              />
             </div>
           )}
         </div>
@@ -10232,6 +10323,7 @@ function PayRunsView({
                     values={f4Periods}
                   />
                 </div>
+                <ContextDateRangeFilter />
 
                 {/* 2. Year Filter */}
                 <div>
@@ -11049,15 +11141,23 @@ function PayslipsView({
 
       {/* Primary filters row */}
       <div
-        style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}
+        style={{
+          display: "flex",
+          gap: 10,
+          marginBottom: 8,
+          flexWrap: "wrap",
+          alignItems: "flex-end",
+        }}
       >
         {!myEmp && (
-          <ValueHelp
-            value={empSearch}
-            onChange={setEmpSearch}
-            placeholder="Search employee name or ID…"
-            values={empNames}
-          />
+          <div style={{ flex: "1 1 250px", minWidth: 220, maxWidth: 320 }}>
+            <ValueHelp
+              value={empSearch}
+              onChange={setEmpSearch}
+              placeholder="Search employee name or ID…"
+              values={empNames}
+            />
+          </div>
         )}
         <select
           value={selPeriod}
@@ -11080,74 +11180,61 @@ function PayslipsView({
             ))}
           </select>
         )}
-        <button
-          onClick={() => setShowAdv((v) => !v)}
-          style={{
-            padding: "7px 14px",
-            background: showAdv || activeFilters > 0 ? F.infoBg : F.card,
-            border: `1px solid ${activeFilters > 0 ? F.brand : F.border}`,
-            borderRadius: 4,
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 600,
-            color: activeFilters > 0 ? F.brand : F.text2,
-            fontFamily: "inherit",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="4" y1="6" x2="20" y2="6" />
-            <line x1="8" y1="12" x2="16" y2="12" />
-            <line x1="11" y1="18" x2="13" y2="18" />
-          </svg>
-          More Filters{" "}
-          {activeFilters > 0 && (
-            <span
-              style={{
-                background: F.brand,
-                color: "#fff",
-                borderRadius: 10,
-                padding: "0 6px",
-                fontSize: 11,
-              }}
-            >
-              {activeFilters}
-            </span>
-          )}
-        </button>
-        {activeFilters > 0 && (
+        <ContextDateRangeFilter />
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "nowrap" }}>
           <button
-            onClick={clearAll}
+            onClick={() => setShowAdv((v) => !v)}
             style={{
-              padding: "7px 12px",
-              background: F.errorBg,
-              border: `1px solid #e8b4b4`,
+              height: 34,
+              padding: "0 14px",
+              background: showAdv || activeFilters > 0 ? F.infoBg : F.card,
+              border: `1px solid ${activeFilters > 0 ? F.brand : F.border}`,
               borderRadius: 4,
               cursor: "pointer",
               fontSize: 12,
               fontWeight: 600,
-              color: F.error,
+              color: activeFilters > 0 ? F.brand : F.text2,
               fontFamily: "inherit",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              whiteSpace: "nowrap",
             }}
           >
-            Clear
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <line x1="8" y1="12" x2="16" y2="12" />
+              <line x1="11" y1="18" x2="13" y2="18" />
+            </svg>
+            More Filters{" "}
+            {activeFilters > 0 && (
+              <span
+                style={{
+                  background: F.brand,
+                  color: "#fff",
+                  borderRadius: 10,
+                  padding: "0 6px",
+                  fontSize: 11,
+                }}
+              >
+                {activeFilters}
+              </span>
+            )}
           </button>
-        )}
-        <Btn onClick={applyPayslipFilters}>Go</Btn>
-        <Btn variant="secondary" onClick={clearAll}>
-          Clear Filters
-        </Btn>
+          <Btn onClick={applyPayslipFilters} style={{ height: 34 }}>Go</Btn>
+          <Btn variant="secondary" onClick={clearAll} style={{ height: 34 }}>
+            Clear Filters
+          </Btn>
+        </div>
       </div>
 
       {/* Advanced filters */}
@@ -11529,7 +11616,8 @@ function ReportsView({
             <span style={{ fontSize: 14, fontWeight: 600, color: F.text1 }}>
               {REPORT_LIST.find((r) => r.id === active)?.label}
             </span>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <ContextDateRangeFilter />
               <select
                 value={period}
                 onChange={(e) => setPeriod(e.target.value)}
@@ -12570,7 +12658,7 @@ function AuditHistoryView({
           ))}
         </select>
         </Fld>
-        <Fld label="From Date">
+        <Fld label="Record Date From">
           <input
             type="date"
             value={filterDraft.dateFrom}
@@ -12578,7 +12666,7 @@ function AuditHistoryView({
             style={iSt}
           />
         </Fld>
-        <Fld label="To Date">
+        <Fld label="Record Date To">
           <input
             type="date"
             value={filterDraft.dateTo}
@@ -21582,6 +21670,8 @@ function PayrollHistoryView({
           </Fld>
         </div>
 
+        <ContextDateRangeFilter />
+
         {/* Sort Order Toggle */}
         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
           <div
@@ -22205,6 +22295,8 @@ function EmployeePayslipsView({
           </select>
         </Fld>
 
+        <ContextDateRangeFilter />
+
         <Btn
           onClick={() =>
             setAppliedPayslipFilters({
@@ -22548,6 +22640,7 @@ function OrgDocumentsView({
             <option value="status-asc">Status A-Z</option>
           </select>
         </Fld>
+        <ContextDateRangeFilter />
         <Btn onClick={applyOrgDocFilters}>Go</Btn>
         <Btn variant="secondary" onClick={clearOrgDocFilters}>
           Clear Filters
@@ -23077,6 +23170,8 @@ function DocumentsView({
             </select>
           </Fld>
         </div>
+
+        <ContextDateRangeFilter />
 
         <Btn onClick={applyDocumentFilters}>Go</Btn>
         <Btn variant="secondary" onClick={clearDocumentFilters}>
@@ -24505,6 +24600,7 @@ export default function App() {
               containerType: "inline-size",
             }}
           >
+            <DateFilterCtx.Provider value={{ active: ["payruns", "payslips", "documents", "reports", "audit"].includes(view), from: rangeFrom, to: rangeTo, onFromChange: setRangeFrom, onToChange: setRangeTo, onApply: () => showToast(rangeFrom || rangeTo ? `Showing records from ${rangeFrom || "the beginning"} to ${rangeTo || "today"}` : "Showing all available records", "info") }}>
             {view === "profile" ? (
               <UnifiedProfileView
                 persona={persona}
@@ -24523,15 +24619,6 @@ export default function App() {
               />
             ) : (
               <>
-                {["payruns", "payslips", "documents", "reports", "audit"].includes(view) && (
-                  <DateRangeFilter
-                    from={rangeFrom}
-                    to={rangeTo}
-                    onFromChange={setRangeFrom}
-                    onToChange={setRangeTo}
-                    onApply={() => showToast(rangeFrom || rangeTo ? `Showing records from ${rangeFrom || "the beginning"} to ${rangeTo || "today"}` : "Showing all available records", "info")}
-                  />
-                )}
                 {persona === "org_admin" && (
                   <>
                     {view === "dashboard" && (
@@ -24642,6 +24729,7 @@ export default function App() {
                 )}
               </>
             )}
+            </DateFilterCtx.Provider>
           </main>
         </div>
       </div>

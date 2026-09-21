@@ -143,6 +143,12 @@ tr:has(> td[colspan="2"]) > td {
   background: #eaf3ff !important;
 }
 
+/* Employee column customizer: preserve access to every field as the list grows. */
+div[style*="width: 330px"][style*="z-index: 5"] {
+  max-height: calc(100vh - 180px) !important;
+  overflow-y: auto !important;
+}
+
 /* Word-break for slide panels and modals to prevent text overflow */
 [style*="position: fixed"] {
   word-break: break-word;
