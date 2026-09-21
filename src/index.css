@@ -137,6 +137,12 @@ table {
   max-width: 100%;
 }
 
+/* Employee salary summary: apply the total-row fill to every cell so the
+   Cost to Company band reaches the annual amount at the far right. */
+tr:has(> td[colspan="2"]) > td {
+  background: #eaf3ff !important;
+}
+
 /* Word-break for slide panels and modals to prevent text overflow */
 [style*="position: fixed"] {
   word-break: break-word;

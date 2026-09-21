@@ -104,6 +104,29 @@ function LiveClock() {
   )
 }
 
+function DateRangeFilter({
+  from,
+  to,
+  onFromChange,
+  onToChange,
+  onApply,
+}: {
+  from: string
+  to: string
+  onFromChange: (value: string) => void
+  onToChange: (value: string) => void
+  onApply: () => void
+}) {
+  return (
+    <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 8, padding: "10px 12px", marginBottom: 14, display: "flex", alignItems: "end", gap: 10, flexWrap: "wrap" }}>
+      <div style={{ fontSize: 12, fontWeight: 800, color: F.text2, paddingBottom: 9 }}>Record date</div>
+      <label style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>From<input aria-label="Filter from date" type="date" value={from} onChange={(event) => onFromChange(event.target.value)} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
+      <label style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>To<input aria-label="Filter to date" type="date" value={to} onChange={(event) => onToChange(event.target.value)} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
+      <Btn small onClick={onApply}>Apply range</Btn>
+    </div>
+  )
+}
+
 function AdminWorkspaceHero({
   workspace,
   initials,
@@ -1203,7 +1226,6 @@ function PH({
 type BtnVariant = "primary" | "secondary" | "danger" | "ghost" | "success"
 function Pagination({ page, pageSize, total, onPageChange }: { page: number; pageSize: number; total: number; onPageChange: (page: number) => void }) {
   const pages = Math.max(1, Math.ceil(total / pageSize))
-  if (total <= pageSize) return null
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderTop: `1px solid ${F.border}`, fontSize: 12, color: F.text2 }}>
       <span>Showing {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} of {total}</span>
@@ -3458,16 +3480,65 @@ function EmployeeDetailPage({
 }) {
   const toast = useToast()
   const [editing, setEditing] = useState(false)
+  const [activeTab, setActiveTab] = useState("overview")
+  const [employeeDocs, setEmployeeDocs] = useState([
+    { name: "Employment agreement", category: "Employment", updated: "12 Jan 2025", status: "Verified" },
+    { name: "PAN card", category: "Identity", updated: "12 Jan 2025", status: "Verified" },
+    { name: "Bank account proof", category: "Payroll", updated: "18 Jan 2025", status: "Pending review" },
+  ])
+  const [payroll, setPayroll] = useState(() => {
+    const structure = ss.find((item) => item.name === emp.salaryStructure)
+    return {
+      salaryStructure: emp.salaryStructure,
+      basic: structure?.basic ?? Math.round(emp.grossSalary * 0.5),
+      hra: structure?.hra ?? Math.round(emp.grossSalary * 0.2),
+      fixedAllowance: structure?.fixedAllowance ?? Math.round(emp.grossSalary * 0.15),
+      specialAllowance: structure?.specialAllowance ?? Math.round(emp.grossSalary * 0.15),
+      pfRate: 12,
+      tdsRate: 10,
+      professionalTax: emp.grossSalary > 15000 ? 200 : 150,
+      paymentMethod: "Bank transfer",
+      bankAccount: "4821",
+      ifsc: "HDFC0001234",
+    }
+  })
+  const [editingPayroll, setEditingPayroll] = useState(false)
+  const [annualCtc, setAnnualCtc] = useState(emp.grossSalary * 12)
+  const [extraEarnings, setExtraEarnings] = useState<{ id: number; name: string; calculation: string; amount: number }[]>([])
+  const [calculationType, setCalculationType] = useState({ basic: "% of CTC", hra: "% of Basic", fixedAllowance: "Fixed amount", specialAllowance: "Fixed amount" })
+  const [editingPayslips, setEditingPayslips] = useState(false)
+  const [payslipRows, setPayslipRows] = useState(() => ["August 2026", "July 2026", "June 2026", "May 2026"].map((period, index) => ({ period, gross: emp.grossSalary, deductions: Math.round(emp.grossSalary * 0.22) + (emp.grossSalary > 15000 ? 200 : 150), status: index === 0 ? "Available" : "Paid" })))
+  const [editingDocuments, setEditingDocuments] = useState(false)
+  const [editingLeave, setEditingLeave] = useState(false)
+  const [leaveBalances, setLeaveBalances] = useState({ annualEntitlement: 20, annualUsed: 6, sickEntitlement: 12, sickUsed: 2, attendance: 96 })
+  const [investments, setInvestments] = useState([
+    { type: "Section 80C", description: "Provident Fund contribution", declared: 18000, approved: 18000, status: "Verified" },
+    { type: "House Rent Allowance", description: "Rent declaration", declared: 120000, approved: 0, status: "Pending" },
+  ])
+  const [editingInvestments, setEditingInvestments] = useState(false)
+  const [loanRows, setLoanRows] = useState([{ type: "Salary advance", principal: 0, outstanding: 0, installment: 0, status: "No active loan" }])
+  const [editingLoans, setEditingLoans] = useState(false)
+  const [editingStatutory, setEditingStatutory] = useState(false)
+  const [editingPersonal, setEditingPersonal] = useState(false)
+  const [personalInfo, setPersonalInfo] = useState({ dateOfBirth: "03/11/2002", fatherName: "Rajinikanth", pan: "AAAAA0000A", personalEmail: emp.email, address: "Panvel, Maharashtra - 410206", differentlyAbled: "None" })
   const [draft, setDraft] = useState<Employee>({ ...emp })
   const [confirm, setConfirm] = useState<{
     msg: string
     onOk: () => void
   } | null>(null)
-  const s = ss.find((x) => x.name === emp.salaryStructure)
-  const pf = s ? Math.round(s.basic * 0.12) : 0
-  const tds = Math.round(emp.grossSalary * 0.1)
-  const pt = emp.grossSalary > 15000 ? 200 : 150
-  const net = emp.grossSalary - pf - tds - pt
+  const s = ss.find((x) => x.name === payroll.salaryStructure)
+  const extraEarningsTotal = extraEarnings.reduce((sum, item) => sum + item.amount, 0)
+  const gross = payroll.basic + payroll.hra + payroll.fixedAllowance + payroll.specialAllowance + extraEarningsTotal
+  const pf = Math.round(payroll.basic * (payroll.pfRate / 100))
+  const tds = Math.round(gross * (payroll.tdsRate / 100))
+  const pt = payroll.professionalTax
+  const net = gross - pf - tds - pt
+
+  const savePayroll = () => {
+    setEmps(emps.map((item) => item.id === emp.id ? { ...item, salaryStructure: payroll.salaryStructure, grossSalary: gross } : item))
+    setEditingPayroll(false)
+    toast("Compensation and payroll settings saved", "success")
+  }
 
   const save = () => {
     const updated = {
@@ -3479,7 +3550,6 @@ function EmployeeDetailPage({
     setEmps(emps.map((e) => (e.id === emp.id ? updated : e)))
     setEditing(false)
     toast("Employee details saved", "success")
-    onBack() // go back to list with fresh data
   }
 
   const toggleStatus = () => {
@@ -3490,7 +3560,6 @@ function EmployeeDetailPage({
         setEmps(emps.map((e) => (e.id === emp.id ? { ...e, status: next } : e)))
         toast(`Status updated to ${next}`, "success")
         setConfirm(null)
-        onBack()
       },
     })
   }
@@ -3550,17 +3619,17 @@ function EmployeeDetailPage({
       {/* Hero card */}
       <div
         style={{
-          background: F.card,
-          border: `1px solid ${F.border}`,
-          borderRadius: 10,
-          marginBottom: 18,
-          overflow: "hidden",
+          background: F.pageBg,
+          border: "none",
+          borderRadius: 0,
+          marginBottom: 0,
+          overflow: "visible",
         }}
       >
         <div
           style={{
-            background: `linear-gradient(135deg, ${F.shell} 0%, #2a3a4e 100%)`,
-            padding: "28px 28px 24px",
+            background: F.pageBg,
+            padding: "8px 2px 22px",
             display: "flex",
             alignItems: "flex-start",
             gap: 20,
@@ -3571,15 +3640,15 @@ function EmployeeDetailPage({
               width: 64,
               height: 64,
               borderRadius: "50%",
-              background: F.brand,
-              color: "#fff",
+              background: "#FCE5D5",
+              color: "#A13D13",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontSize: 22,
               fontWeight: 800,
               flexShrink: 0,
-              border: "3px solid rgba(255,255,255,0.25)",
+              border: "3px solid #FFFFFF",
             }}
           >
             {initials}
@@ -3589,32 +3658,32 @@ function EmployeeDetailPage({
               style={{
                 fontSize: 22,
                 fontWeight: 800,
-                color: "#fff",
+                color: F.text1,
                 marginBottom: 4,
               }}
             >
-              {emp.name}
+              {emp.id} - {emp.name}
             </div>
             <div
               style={{
                 fontSize: 13,
-                color: "rgba(255,255,255,0.65)",
+                color: "#667085",
                 marginBottom: 10,
               }}
             >
-              {emp.designation} · {emp.department} · {emp.id}
+              {emp.designation}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {empBadge(emp.status)}
               <Badge
                 label={emp.empType}
                 color={F.brand}
-                bg="rgba(0,112,242,0.25)"
+                bg={F.infoBg}
               />
               <Badge
                 label={emp.location}
-                color="rgba(255,255,255,0.7)"
-                bg="rgba(255,255,255,0.12)"
+                color={F.text2}
+                bg="#FFFFFF"
               />
             </div>
           </div>
@@ -3623,11 +3692,14 @@ function EmployeeDetailPage({
               <>
                 <Btn
                   onClick={() => {
-                    setDraft({ ...emp })
-                    setEditing(true)
+                    if (activeTab === "salary") setEditingPayroll(true)
+                    else {
+                      setDraft({ ...emp })
+                      setEditing(true)
+                    }
                   }}
                 >
-                  Edit Details
+                  {activeTab === "salary" ? "Edit Salary" : "Edit Details"}
                 </Btn>
                 <Btn
                   variant={emp.status === "Active" ? "danger" : "success"}
@@ -3648,49 +3720,63 @@ function EmployeeDetailPage({
             )}
           </div>
         </div>
-        {/* Salary KPIs */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4,1fr)",
-            borderTop: `1px solid ${F.border}`,
-          }}
-        >
-          {[
-            { l: "Gross Monthly", v: inr(emp.grossSalary), c: F.warning },
-            { l: "Net Take-Home", v: inr(net), c: F.success },
-            { l: "Total Deductions", v: inr(pf + tds + pt), c: F.error },
-            { l: "Annual CTC", v: inr(emp.grossSalary * 12), c: "#8A5CF6" },
-          ].map((x, i) => (
-            <div
-              key={x.l}
+      </div>
+
+      {/* Employee workspace navigation — every operational record stays in this employee context. */}
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          overflowX: "auto",
+          borderBottom: `1px solid ${F.border}`,
+          marginBottom: 18,
+          background: "transparent",
+          padding: "0",
+          borderRadius: 0,
+        }}
+      >
+        {[
+          ["overview", "Overview"],
+          ["salary", "Salary Details"],
+          ["investments", "Investments"],
+          ["payslips", "Payslips & Forms"],
+          ["loans", "Loans"],
+        ].map(([id, label]) => {
+          const active = activeTab === id
+          return (
+            <button
+              key={id}
+              onClick={() => {
+                setActiveTab(id)
+                setEditing(false)
+                if (id === "salary") setEditingPayroll(true)
+              }}
               style={{
-                padding: "16px 22px",
-                borderRight: i < 3 ? `1px solid ${F.border}` : "none",
+                border: "none",
+                borderBottom: active ? `3px solid ${F.brand}` : "3px solid transparent",
+                background: "transparent",
+                padding: "14px 14px 11px",
+                whiteSpace: "nowrap",
+                color: active ? F.brand : F.text2,
+                fontWeight: active ? 800 : 600,
+                fontSize: 13,
+                cursor: "pointer",
+                fontFamily: "inherit",
               }}
             >
-              <div
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: F.text3,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.07em",
-                  marginBottom: 6,
-                }}
-              >
-                {x.l}
-              </div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: x.c }}>
-                {x.v}
-              </div>
-            </div>
-          ))}
-        </div>
+              {label}
+            </button>
+          )
+        })}
+      </div>
+
+      <div style={{ background: "#FFF6DF", borderTop: "1px solid #F8E5B6", borderBottom: "1px solid #F8E5B6", padding: "14px 16px", margin: "0 -26px 22px", color: "#553311" }}>
+        <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 6 }}>● &nbsp; Need Your Attention</div>
+        <div style={{ fontSize: 13 }}>• &nbsp; An invite has been sent to this employee to access the Employee Self Service Portal. However, the employee is yet to accept it. <button onClick={() => toast("Invitation resent", "success")} style={{ border: "none", background: "transparent", color: F.brand, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Reinvite</button><span style={{ color: F.border, margin: "0 10px" }}>|</span><button onClick={() => toast("Portal access disabled", "success")} style={{ border: "none", background: "transparent", color: F.brand, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Disable Portal</button></div>
       </div>
 
       {/* Two-column detail grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      {activeTab === "overview" && <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 14 }}>
         {/* Personal & Employment */}
         <div
           style={{
@@ -3708,12 +3794,13 @@ function EmployeeDetailPage({
               color: F.text1,
             }}
           >
-            Personal &amp; Employment
+            <span>Basic Information</span><button aria-label="Edit basic information" onClick={() => { setDraft({ ...emp }); setEditing(true) }} style={{ border: "none", background: "transparent", color: F.brand, cursor: "pointer", fontSize: 17 }}>✎</button>
           </div>
           <div
             style={{
               padding: "16px 20px",
-              display: "flex",
+              display: editing ? "flex" : "grid",
+              gridTemplateColumns: editing ? undefined : "1fr 1fr",
               flexDirection: "column",
               gap: 0,
             }}
@@ -3834,13 +3921,16 @@ function EmployeeDetailPage({
               </div>
             ) : (
               [
-                ["Email", emp.email],
+                ["Name", emp.name],
+                ["Email Address", emp.email],
+                ["Mobile Number", emp.mobile || "08668229742"],
+                ["Date of Joining", fmtD(emp.doj)],
                 ["Department", emp.department],
                 ["Designation", emp.designation],
                 ["Reporting Manager", emp.manager || "—"],
-                ["Date of Joining", fmtD(emp.doj)],
                 ["Work Location", emp.location],
                 ["Employment Type", emp.empType],
+                ["Portal Access", "Invite Sent · Reinvite · Disable"],
               ].map(([l, v]) => (
                 <div
                   key={l}
@@ -3849,6 +3939,7 @@ function EmployeeDetailPage({
                     justifyContent: "space-between",
                     padding: "10px 0",
                     borderBottom: `1px solid ${F.border}`,
+                    width: "50%",
                   }}
                 >
                   <span style={{ fontSize: 12, color: F.text2 }}>{l}</span>
@@ -3870,7 +3961,7 @@ function EmployeeDetailPage({
         </div>
 
         {/* Salary Details */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "none", flexDirection: "column", gap: 14 }}>
           <div
             style={{
               background: F.card,
@@ -4047,7 +4138,94 @@ function EmployeeDetailPage({
             </div>
           </div>
         </div>
-      </div>
+      </div>}
+
+      {activeTab === "overview" && <>
+        <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, padding: "20px 22px", marginTop: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 18, display: "flex", justifyContent: "space-between" }}><span>Statutory Information</span><span>{editingStatutory && <Btn small variant="success" onClick={() => { setEditingStatutory(false); toast("Statutory information saved", "success") }}>Save</Btn>} <button aria-label="Edit statutory information" onClick={() => setEditingStatutory(!editingStatutory)} style={{ border: "none", background: "transparent", color: F.brand, cursor: "pointer", fontSize: 17 }}>✎</button></span></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 72, rowGap: 16 }}>
+            {[ ["EPF rate (%)", "pfRate"], ["TDS rate (%)", "tdsRate"], ["Professional Tax", "professionalTax"], ["Payment Method", "paymentMethod"], ["Account Ending", "bankAccount"], ["IFSC Code", "ifsc"] ].map(([label, field]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "235px 1fr", fontSize: 13, alignItems: "center" }}><span style={{ color: F.text2 }}>{label}</span>{editingStatutory ? (field === "paymentMethod" ? <select style={iSt} value={payroll.paymentMethod} onChange={(e) => setPayroll({ ...payroll, paymentMethod: e.target.value })}><option>Bank transfer</option><option>Cheque</option><option>Cash</option></select> : <input type={field === "ifsc" || field === "bankAccount" ? "text" : "number"} style={iSt} value={payroll[field as "pfRate" | "tdsRate" | "professionalTax" | "bankAccount" | "ifsc"]} onChange={(e) => setPayroll({ ...payroll, [field]: field === "ifsc" || field === "bankAccount" ? e.target.value : Number(e.target.value) })} />) : <strong>{String(payroll[field as "pfRate" | "tdsRate" | "professionalTax" | "paymentMethod" | "bankAccount" | "ifsc"])}</strong>}</div>)}
+          </div>
+        </div>
+        <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, padding: "20px 22px", marginTop: 14 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 18, display: "flex", justifyContent: "space-between" }}><span>Personal Information</span><span>{editingPersonal && <Btn small variant="success" onClick={() => { setEditingPersonal(false); toast("Personal information saved", "success") }}>Save</Btn>} <button aria-label="Edit personal information" onClick={() => setEditingPersonal(!editingPersonal)} style={{ border: "none", background: "transparent", color: F.brand, cursor: "pointer", fontSize: 17 }}>✎</button></span></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 72, rowGap: 16 }}>
+            {[ ["Date of Birth", "dateOfBirth"], ["Personal Email", "personalEmail"], ["Father's Name", "fatherName"], ["Residential Address", "address"], ["PAN", "pan"], ["Differently Abled Type", "differentlyAbled"] ].map(([label, field]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "235px 1fr", fontSize: 13, alignItems: "center" }}><span style={{ color: F.text2 }}>{label}</span>{editingPersonal ? <input style={iSt} value={personalInfo[field as keyof typeof personalInfo]} onChange={(e) => setPersonalInfo({ ...personalInfo, [field]: e.target.value })} /> : <strong>{personalInfo[field as keyof typeof personalInfo]}</strong>}</div>)}
+          </div>
+        </div>
+      </>}
+
+      {activeTab === "salary" && (
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(280px, 0.65fr)", gap: 14 }}>
+          <div style={{ gridColumn: "1 / -1", background: F.card, border: `1px solid ${F.border}`, borderRadius: 8, overflow: "hidden" }}>
+              <div style={{ padding: "18px 20px", fontSize: 22, fontWeight: 500, borderBottom: `1px solid ${F.border}`, display: "flex", justifyContent: "space-between" }}><span>{emp.name.split(" ")[0]}'s salary details</span><button aria-label="Edit salary details" onClick={() => setEditingPayroll(true)} style={{ border: "none", background: "transparent", color: F.brand, cursor: "pointer", fontSize: 18 }}>✎</button></div>
+            <div style={{ padding: "18px 20px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 22, marginBottom: 22 }}><strong>Annual CTC <span style={{ color: F.error }}>*</span></strong>{editingPayroll ? <input type="number" aria-label="Annual CTC" style={{ ...iSt, width: 310, fontSize: 16 }} value={annualCtc} onChange={(e) => setAnnualCtc(Number(e.target.value))} /> : <strong style={{ fontSize: 17 }}>{inr(annualCtc)} <span style={{ fontSize: 12, color: F.text3, fontWeight: 500 }}>per year</span></strong>}</div>
+              <table style={{ width: "100%", borderCollapse: "collapse", border: `1px solid ${F.border}` }}><thead><tr><Th>Salary components</Th><Th>Calculation type</Th><Th right>Monthly amount</Th><Th right>Annual amount</Th></tr></thead><tbody><TrH><Td colSpan={4} style={{ fontWeight: 800, padding: "16px" }}>Earnings</Td></TrH>{([["Basic", "basic"], ["House Rent Allowance", "hra"], ["Fixed Allowance", "fixedAllowance"], ["Special Allowance", "specialAllowance"]] as [string, "basic" | "hra" | "fixedAllowance" | "specialAllowance"][]).map(([label, field]) => { const monthlyCtcBase = annualCtc / 12; const percentage = field === "basic" ? Math.round((payroll.basic / monthlyCtcBase) * 100) : field === "hra" ? Math.round((payroll.hra / payroll.basic) * 100) : 0; return <TrH key={field}><Td>{label}</Td><Td>{editingPayroll ? <div style={{ display: "flex", maxWidth: 260 }}><select aria-label={`${label} calculation type`} style={{ ...iSt, borderRadius: "6px 0 0 6px", minWidth: 130 }} value={calculationType[field]} onChange={(e) => setCalculationType({ ...calculationType, [field]: e.target.value })}><option>Fixed amount</option><option>% of CTC</option><option>% of Basic</option></select>{calculationType[field] !== "Fixed amount" && <input aria-label={`${label} percentage`} type="number" min="0" max="100" style={{ ...iSt, width: 75, borderRadius: "0 6px 6px 0", marginLeft: -1 }} value={percentage} onChange={(e) => { const pct = Number(e.target.value); if (field === "basic") setPayroll({ ...payroll, basic: Math.round(monthlyCtcBase * pct / 100) }); if (field === "hra") setPayroll({ ...payroll, hra: Math.round(payroll.basic * pct / 100) }) }} />}</div> : calculationType[field] === "Fixed amount" ? "Fixed amount" : `${percentage}% ${calculationType[field] === "% of CTC" ? "of CTC" : "of Basic"}`}</Td><Td right>{editingPayroll ? <input type="number" style={{ ...iSt, width: 150 }} value={payroll[field]} onChange={(e) => setPayroll({ ...payroll, [field]: Number(e.target.value) })} /> : inr(payroll[field])}</Td><Td right>{inr(payroll[field] * 12)}</Td></TrH>})}<TrH><Td colSpan={2} style={{ fontWeight: 800, background: "#EAF3FF", padding: "16px" }}>Cost to Company</Td><Td right style={{ fontWeight: 800, background: "#EAF3FF" }}>{inr(gross)}</Td><Td right style={{ fontWeight: 800, background: "#EAF3FF" }}>{inr(gross * 12)}</Td></TrH></tbody></table>
+              <button onClick={() => { setExtraEarnings([...extraEarnings, { id: Date.now(), name: "New Earning", calculation: "Fixed amount", amount: 0 }]); toast("New earning added", "success") }} style={{ marginTop: 14, border: "none", background: "transparent", color: F.brand, cursor: "pointer", fontWeight: 700, fontFamily: "inherit", fontSize: 14 }}>＋ Add Earning</button>
+              {extraEarnings.map((earning) => <div key={earning.id} style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr 0.7fr auto", gap: 12, alignItems: "end", marginTop: 12, padding: 12, border: `1px solid ${F.brand}40`, borderRadius: 7, background: F.infoBg }}><Fld label="Earning name"><input style={iSt} value={earning.name} onChange={(e) => setExtraEarnings(extraEarnings.map((item) => item.id === earning.id ? { ...item, name: e.target.value } : item))} /></Fld><Fld label="Calculation type"><select style={iSt} value={earning.calculation} onChange={(e) => setExtraEarnings(extraEarnings.map((item) => item.id === earning.id ? { ...item, calculation: e.target.value } : item))}><option>Fixed amount</option><option>% of CTC</option><option>% of Basic</option></select></Fld><Fld label="Monthly amount"><input type="number" min="0" style={iSt} value={earning.amount} onChange={(e) => setExtraEarnings(extraEarnings.map((item) => item.id === earning.id ? { ...item, amount: Number(e.target.value) } : item))} /></Fld><Btn small variant="secondary" onClick={() => setExtraEarnings(extraEarnings.filter((item) => item.id !== earning.id))}>Remove</Btn></div>)}
+              <div style={{ borderTop: `1px solid ${F.border}`, marginTop: 22, paddingTop: 20 }}>
+                <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 22 }}>Benefits</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1.15fr 1fr 0.7fr 0.7fr", gap: 14, alignItems: "start" }}>
+                  <div><strong>EPF - Employer Contribution</strong><div style={{ marginTop: 12, paddingLeft: 14, borderLeft: `2px solid ${F.border}`, fontSize: 13 }}><strong>Employee Contribution</strong><div style={{ color: "#667085", marginTop: 5 }}>{payroll.pfRate}% of Actual PF Wage</div><label style={{ display: "block", marginTop: 10 }}><input type="checkbox" defaultChecked /> Contribute to Employee Pension Scheme</label><label style={{ display: "block", marginTop: 7 }}><input type="checkbox" defaultChecked /> Contribute EPS at actual PF Wages</label></div></div>
+                  <div style={{ paddingTop: 34 }}>{editingPayroll ? <input type="number" style={{ ...iSt, width: 130 }} value={payroll.pfRate} onChange={(e) => setPayroll({ ...payroll, pfRate: Number(e.target.value) })} /> : `${payroll.pfRate.toFixed(2)}% of PF Wages`}</div><div style={{ paddingTop: 34, textAlign: "right" }}>{inr(pf)}</div><div style={{ paddingTop: 34, textAlign: "right" }}>{inr(pf * 12)}</div>
+                </div>
+              </div>
+              <div style={{ color: F.text2, fontSize: 12, marginTop: 15 }}>Note: Any changes made to salary components take effect in the current pay run, provided it is not approved.</div>
+              <div style={{ display: "flex", gap: 8, marginTop: 20 }}><Btn onClick={savePayroll}>Save</Btn><Btn variant="secondary" onClick={() => setEditingPayroll(false)}>Cancel</Btn></div>
+            </div>
+          </div>
+          <div style={{ display: "none", background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, overflow: "hidden" }}>
+            <div style={{ padding: "16px 20px", borderBottom: `1px solid ${F.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div><div style={{ fontWeight: 800 }}>Salary structure & benefits</div><div style={{ fontSize: 12, color: F.text2, marginTop: 3 }}>Manage compensation assigned to {emp.name}.</div></div>
+              <div style={{ display: "flex", gap: 8 }}>{editingPayroll && <Btn small variant="secondary" onClick={() => setEditingPayroll(false)}>Cancel</Btn>}<Btn small variant={editingPayroll ? "success" : "secondary"} onClick={() => editingPayroll ? savePayroll() : setEditingPayroll(true)}>{editingPayroll ? "Save payroll" : "Edit payroll"}</Btn></div>
+            </div>
+            <div style={{ padding: 20 }}>
+              {editingPayroll ? <Fld label="Salary Structure"><select style={iSt} value={payroll.salaryStructure} onChange={(e) => setPayroll({ ...payroll, salaryStructure: e.target.value })}>{ss.map((item) => <option key={item.id}>{item.name}</option>)}</select></Fld> : <IR label="Assigned Salary Structure" value={payroll.salaryStructure} />}
+              <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                {([
+                  ["Basic pay", "basic", F.brand], ["House rent allowance", "hra", F.success],
+                  ["Fixed allowance", "fixedAllowance", F.warning], ["Special allowance", "specialAllowance", "#8A5CF6"],
+                ] as [string, "basic" | "hra" | "fixedAllowance" | "specialAllowance", string][]).map(([label, field, color]) => <div key={label} style={{ padding: 14, border: `1px solid ${F.border}`, borderRadius: 8, borderLeft: `4px solid ${color}` }}><div style={{ color: F.text2, fontSize: 12 }}>{label}</div>{editingPayroll ? <input type="number" min="0" style={{ ...iSt, marginTop: 7, fontWeight: 800 }} value={payroll[field]} onChange={(e) => setPayroll({ ...payroll, [field]: Number(e.target.value) })} /> : <div style={{ marginTop: 5, fontWeight: 800, fontSize: 17 }}>{inr(payroll[field])}</div>}<div style={{ color: F.text3, fontSize: 11, marginTop: 5 }}>Monthly</div></div>)}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "none", background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, padding: 20 }}>
+            <div style={{ fontWeight: 800, marginBottom: 14 }}>Statutory & payment details</div>
+            {editingPayroll ? <div style={{ display: "flex", flexDirection: "column", gap: 10 }}><Fld label="EPF rate (%)"><input type="number" min="0" max="100" value={payroll.pfRate} onChange={(e) => setPayroll({ ...payroll, pfRate: Number(e.target.value) })} style={iSt} /></Fld><Fld label="TDS rate (%)"><input type="number" min="0" max="100" value={payroll.tdsRate} onChange={(e) => setPayroll({ ...payroll, tdsRate: Number(e.target.value) })} style={iSt} /></Fld><Fld label="Professional tax"><input type="number" min="0" value={payroll.professionalTax} onChange={(e) => setPayroll({ ...payroll, professionalTax: Number(e.target.value) })} style={iSt} /></Fld><Fld label="Payment method"><select value={payroll.paymentMethod} onChange={(e) => setPayroll({ ...payroll, paymentMethod: e.target.value })} style={iSt}><option>Bank transfer</option><option>Cheque</option><option>Cash</option></select></Fld><Fld label="Account ending"><input value={payroll.bankAccount} onChange={(e) => setPayroll({ ...payroll, bankAccount: e.target.value })} style={iSt} /></Fld><Fld label="IFSC code"><input value={payroll.ifsc} onChange={(e) => setPayroll({ ...payroll, ifsc: e.target.value.toUpperCase() })} style={iSt} /></Fld></div> : <><IR label="EPF contribution" value={`${inr(pf)} / month (${payroll.pfRate}%)`} /><IR label="Professional tax" value={`${inr(pt)} / month`} /><IR label="Income tax (estimated)" value={`${inr(tds)} / month (${payroll.tdsRate}%)`} /><IR label="Payment method" value={payroll.paymentMethod} /><IR label="Bank account" value={`•••• •••• ${payroll.bankAccount}`} /><IR label="IFSC" value={payroll.ifsc} /></>}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "payslips" && (
+        <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: `1px solid ${F.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontWeight: 800 }}>Payslips & tax forms</div><div style={{ fontSize: 12, color: F.text2, marginTop: 3 }}>{editingPayslips ? "Update the payroll values for each issued period." : "Payroll documents issued specifically to this employee."}</div></div><div style={{ display: "flex", gap: 8 }}>{editingPayslips && <Btn small variant="secondary" onClick={() => setEditingPayslips(false)}>Cancel</Btn>}<Btn small variant={editingPayslips ? "success" : "secondary"} onClick={() => { if (editingPayslips) toast("Payslip adjustments saved", "success"); setEditingPayslips(!editingPayslips) }}>{editingPayslips ? "Save changes" : "Edit figures"}</Btn></div></div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><Th>Pay period</Th><Th>Gross earnings</Th><Th>Deductions</Th><Th>Net pay</Th><Th>Status</Th><Th>Action</Th></tr></thead><tbody>{payslipRows.map((row, i) => <TrH key={row.period}><Td><strong>{row.period}</strong><div style={{ fontSize: 11, color: F.text3 }}>Regular monthly payroll</div></Td><Td>{editingPayslips ? <input aria-label={`${row.period} gross`} type="number" min="0" style={{ ...iSt, width: 120 }} value={row.gross} onChange={(e) => setPayslipRows(payslipRows.map((item, index) => index === i ? { ...item, gross: Number(e.target.value) } : item))} /> : inr(row.gross)}</Td><Td>{editingPayslips ? <input aria-label={`${row.period} deductions`} type="number" min="0" style={{ ...iSt, width: 120 }} value={row.deductions} onChange={(e) => setPayslipRows(payslipRows.map((item, index) => index === i ? { ...item, deductions: Number(e.target.value) } : item))} /> : inr(row.deductions)}</Td><Td style={{ fontWeight: 800, color: F.success }}>{inr(row.gross - row.deductions)}</Td><Td>{editingPayslips ? <select aria-label={`${row.period} status`} style={{ ...iSt, width: 115 }} value={row.status} onChange={(e) => setPayslipRows(payslipRows.map((item, index) => index === i ? { ...item, status: e.target.value } : item))}><option>Available</option><option>Paid</option><option>On hold</option></select> : <Badge label={row.status} color={row.status === "On hold" ? F.warning : F.success} bg={row.status === "On hold" ? F.warningBg : F.successBg} />}</Td><Td><Btn small variant="secondary" onClick={() => toast(`${row.period} payslip opened`, "info")}>View payslip</Btn></Td></TrH>)}</tbody></table>
+        </div>
+      )}
+
+      {activeTab === "investments" && (
+        <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, overflow: "hidden" }}>
+          <div style={{ padding: "16px 20px", borderBottom: `1px solid ${F.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontWeight: 800 }}>Investment declarations</div><div style={{ fontSize: 12, color: F.text2, marginTop: 3 }}>Tax-saving declarations and proof status for this employee.</div></div><div style={{ display: "flex", gap: 8 }}>{editingInvestments && <Btn small variant="secondary" onClick={() => setEditingInvestments(false)}>Cancel</Btn>}<Btn small variant={editingInvestments ? "success" : "secondary"} onClick={() => { if (editingInvestments) toast("Investment declarations saved", "success"); setEditingInvestments(!editingInvestments) }}>{editingInvestments ? "Save changes" : "Edit declarations"}</Btn></div></div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><Th>Declaration</Th><Th>Description</Th><Th>Declared amount</Th><Th>Approved amount</Th><Th>Status</Th></tr></thead><tbody>{investments.map((item, i) => <TrH key={item.type}><Td style={{ fontWeight: 700 }}>{item.type}</Td><Td>{editingInvestments ? <input style={iSt} value={item.description} onChange={(e) => setInvestments(investments.map((row, index) => index === i ? { ...row, description: e.target.value } : row))} /> : item.description}</Td><Td>{editingInvestments ? <input type="number" min="0" style={iSt} value={item.declared} onChange={(e) => setInvestments(investments.map((row, index) => index === i ? { ...row, declared: Number(e.target.value) } : row))} /> : inr(item.declared)}</Td><Td>{editingInvestments ? <input type="number" min="0" style={iSt} value={item.approved} onChange={(e) => setInvestments(investments.map((row, index) => index === i ? { ...row, approved: Number(e.target.value) } : row))} /> : inr(item.approved)}</Td><Td>{editingInvestments ? <select style={iSt} value={item.status} onChange={(e) => setInvestments(investments.map((row, index) => index === i ? { ...row, status: e.target.value } : row))}><option>Verified</option><option>Pending</option><option>Rejected</option></select> : <Badge label={item.status} color={item.status === "Verified" ? F.success : F.warning} bg={item.status === "Verified" ? F.successBg : F.warningBg} />}</Td></TrH>)}</tbody></table>
+        </div>
+      )}
+
+      {activeTab === "loans" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+          <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 8 }}>{editingLeave && <Btn small variant="secondary" onClick={() => setEditingLeave(false)}>Cancel</Btn>}<Btn small variant={editingLeave ? "success" : "secondary"} onClick={() => { if (editingLeave) toast("Leave balances and attendance saved", "success"); setEditingLeave(!editingLeave) }}>{editingLeave ? "Save leave details" : "Edit leave details"}</Btn></div>
+          {[ ["Annual leave", "annualEntitlement", "annualUsed"], ["Sick leave", "sickEntitlement", "sickUsed"] ].map(([title, entitled, used]) => <div key={title} style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, padding: 20 }}><div style={{ fontSize: 12, color: F.text2 }}>{title}</div>{editingLeave ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 9 }}><Fld label="Entitled"><input type="number" min="0" style={iSt} value={leaveBalances[entitled as "annualEntitlement" | "sickEntitlement"]} onChange={(e) => setLeaveBalances({ ...leaveBalances, [entitled]: Number(e.target.value) })} /></Fld><Fld label="Used"><input type="number" min="0" style={iSt} value={leaveBalances[used as "annualUsed" | "sickUsed"]} onChange={(e) => setLeaveBalances({ ...leaveBalances, [used]: Number(e.target.value) })} /></Fld></div> : <><div style={{ fontWeight: 850, fontSize: 26, marginTop: 8, color: F.brand }}>{leaveBalances[entitled as "annualEntitlement" | "sickEntitlement"] - leaveBalances[used as "annualUsed" | "sickUsed"]} days</div><div style={{ fontSize: 12, color: F.text3, marginTop: 5 }}>{leaveBalances[used as "annualUsed" | "sickUsed"]} used of {leaveBalances[entitled as "annualEntitlement" | "sickEntitlement"]}</div></>}</div>)}
+          <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, padding: 20 }}><div style={{ fontSize: 12, color: F.text2 }}>Work attendance</div>{editingLeave ? <Fld label="Attendance percentage"><input type="number" min="0" max="100" style={{ ...iSt, marginTop: 8 }} value={leaveBalances.attendance} onChange={(e) => setLeaveBalances({ ...leaveBalances, attendance: Number(e.target.value) })} /></Fld> : <><div style={{ fontWeight: 850, fontSize: 26, marginTop: 8, color: F.brand }}>{leaveBalances.attendance}%</div><div style={{ fontSize: 12, color: F.text3, marginTop: 5 }}>This month</div></>}</div>
+          <div style={{ gridColumn: "1 / -1", background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, overflow: "hidden" }}><div style={{ padding: "16px 20px", fontWeight: 800, borderBottom: `1px solid ${F.border}` }}>Recent requests</div><table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><Th>Type</Th><Th>Dates</Th><Th>Duration</Th><Th>Status</Th><Th>Action</Th></tr></thead><tbody><TrH><Td>Annual leave</Td><Td>18–19 Sep 2026</Td><Td>2 days</Td><Td><Badge label="Approved" color={F.success} bg={F.successBg} /></Td><Td><Btn small variant="secondary" onClick={() => toast("Leave request opened", "info")}>Review</Btn></Td></TrH></tbody></table></div>
+        </div>
+      )}
+
+      {activeTab === "history" && (
+        <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, padding: 20 }}>
+          <div style={{ fontWeight: 800, marginBottom: 18 }}>Employee payroll timeline</div>
+          {[ ["August 2026 payroll completed", `Net pay ${inr(net)} was released to bank account ending 4821.`, F.success], ["Salary structure reviewed", `${emp.salaryStructure} remains active for this employee.`, F.brand], ["Employment record updated", `${emp.designation} · ${emp.department}`, F.warning] ].map(([title, note, color]) => <div key={title as string} style={{ display: "grid", gridTemplateColumns: "14px 1fr", gap: 12, paddingBottom: 20 }}><div style={{ width: 10, height: 10, marginTop: 4, borderRadius: "50%", background: color as string, boxShadow: `0 0 0 4px ${color}22` }} /><div><div style={{ fontWeight: 750, fontSize: 14 }}>{title as string}</div><div style={{ color: F.text2, fontSize: 12, marginTop: 4 }}>{note as string}</div><div style={{ color: F.text3, fontSize: 11, marginTop: 5 }}>Recorded in this employee file</div></div></div>)}
+        </div>
+      )}
       {confirm && (
         <Confirm
           msg={confirm.msg}
@@ -6060,6 +6238,10 @@ function EmployeesView({
     location: "",
     salaryStructure: "Senior Engineer",
   })
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([])
+  const [bulkAction, setBulkAction] = useState("export_payslips")
+  const [bulkReason, setBulkReason] = useState("")
+  const [bulkStructure, setBulkStructure] = useState(ss[0]?.name ?? "")
 
   // When employee list changes, refresh the selected employee if viewing detail
   const selEmp =
@@ -6194,8 +6376,21 @@ function EmployeesView({
     }
     return a.name.localeCompare(b.name) * dir
   })
-
   const paginatedEmployees = filtered.slice((employeePage - 1) * employeePageSize, employeePage * employeePageSize)
+  const allVisibleSelected = paginatedEmployees.length > 0 && paginatedEmployees.every((employee) => selectedEmployeeIds.includes(employee.id))
+  const toggleVisibleSelection = () => setSelectedEmployeeIds(allVisibleSelected ? selectedEmployeeIds.filter((id) => !paginatedEmployees.some((employee) => employee.id === id)) : Array.from(new Set([...selectedEmployeeIds, ...paginatedEmployees.map((employee) => employee.id)])))
+  const runBulkAction = () => {
+    if (!selectedEmployeeIds.length) return
+    const selected = selectedEmployeeIds.length
+    if (["request_documents", "deactivate"].includes(bulkAction) && !bulkReason.trim()) return toast("Add a reason for this bulk action", "error")
+    if (bulkAction === "activate") setEmps(emps.map((employee) => selectedEmployeeIds.includes(employee.id) ? { ...employee, status: "Active" } : employee))
+    if (bulkAction === "deactivate") setEmps(emps.map((employee) => selectedEmployeeIds.includes(employee.id) ? { ...employee, status: "Inactive" } : employee))
+    if (bulkAction === "assign_structure") { const structure = ss.find((item) => item.name === bulkStructure); setEmps(emps.map((employee) => selectedEmployeeIds.includes(employee.id) ? { ...employee, salaryStructure: bulkStructure, grossSalary: structure?.gross ?? employee.grossSalary } : employee)) }
+    const labels: Record<string, string> = { export_payslips: "Payslip package prepared", portal_invite: "Portal invitations sent", activate: "Employees activated", deactivate: "Employees deactivated", assign_structure: "Salary structure assigned", request_documents: "Document request sent" }
+    toast(`${labels[bulkAction]} for ${selected} employee${selected === 1 ? "" : "s"}`, "success")
+    setSelectedEmployeeIds([])
+    setBulkReason("")
+  }
 
   const addEmployee = () => {
     if (!addForm.name || !addForm.email)
@@ -6740,6 +6935,17 @@ function EmployeesView({
         </div>
       )}
 
+      {selectedEmployeeIds.length > 0 && (
+        <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 8, padding: "12px 14px", marginBottom: 12, display: "flex", alignItems: "end", gap: 10, flexWrap: "wrap", boxShadow: "0 2px 8px rgba(15,23,42,0.08)" }}>
+          <Fld label="Bulk operation"><select style={{ ...iSt, width: 210 }} value={bulkAction} onChange={(e) => setBulkAction(e.target.value)}><option value="export_payslips">Export payslip package</option><option value="portal_invite">Send portal invitations</option><option value="assign_structure">Assign salary structure</option><option value="request_documents">Request employee documents</option><option value="activate">Activate employee access</option><option value="deactivate">Deactivate employee access</option></select></Fld>
+          {bulkAction === "assign_structure" && <Fld label="Salary structure"><select style={{ ...iSt, width: 210 }} value={bulkStructure} onChange={(e) => setBulkStructure(e.target.value)}>{ss.map((structure) => <option key={structure.id}>{structure.name}</option>)}</select></Fld>}
+          {["request_documents", "deactivate"].includes(bulkAction) && <Fld label="Reason *"><input style={{ ...iSt, width: 250 }} value={bulkReason} onChange={(e) => setBulkReason(e.target.value)} placeholder={bulkAction === "deactivate" ? "e.g. Separation processed" : "e.g. Updated proof required"} /></Fld>}
+          <Btn onClick={runBulkAction}>Apply to {selectedEmployeeIds.length}</Btn>
+          <button onClick={() => setSelectedEmployeeIds([])} style={{ border: "none", background: "transparent", color: F.text2, cursor: "pointer", fontFamily: "inherit", padding: "9px 6px" }}>Clear selection</button>
+          <span style={{ marginLeft: "auto", alignSelf: "center", color: F.brand, background: F.infoBg, borderRadius: 16, padding: "6px 11px", fontWeight: 800, fontSize: 12 }}>{selectedEmployeeIds.length} selected</span>
+        </div>
+      )}
+
       <div
         style={{
           background: F.card,
@@ -6752,6 +6958,7 @@ function EmployeesView({
         <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
           <thead>
             <tr>
+              <Th><input aria-label="Select visible employees" type="checkbox" checked={allVisibleSelected} onChange={toggleVisibleSelection} /></Th>
               <Th>Employee</Th>
               <Th>Department</Th>
               <Th>Designation</Th>
@@ -6767,7 +6974,7 @@ function EmployeesView({
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   style={{
                     padding: 48,
                     textAlign: "center",
@@ -6784,6 +6991,7 @@ function EmployeesView({
                 key={e.id}
                 onClick={() => setSubPage({ type: "detail", emp: e })}
               >
+                <Td><input aria-label={`Select ${e.name}`} type="checkbox" checked={selectedEmployeeIds.includes(e.id)} onClick={(event) => event.stopPropagation()} onChange={() => setSelectedEmployeeIds(selectedEmployeeIds.includes(e.id) ? selectedEmployeeIds.filter((id) => id !== e.id) : [...selectedEmployeeIds, e.id])} /></Td>
                 <Td>
                   <div
                     style={{ display: "flex", alignItems: "center", gap: 10 }}
@@ -7235,6 +7443,13 @@ function SalaryManagementView({
   const [tab, setTab] = useState<"structures" | "components" | "templates" | "assignment">(
     "structures",
   )
+  const [structurePage, setStructurePage] = useState(1)
+  const [componentPage, setComponentPage] = useState(1)
+  const [templatePage, setTemplatePage] = useState(1)
+  const [assignmentPage, setAssignmentPage] = useState(1)
+  // Keep these registers compact enough that pagination is available and useful
+  // for structures, components, templates, and employee assignments alike.
+  const salaryTablePageSize = 3
   const salaryWorkflowSteps = [
     "Draft",
     "Calculated",
@@ -7441,6 +7656,11 @@ function SalaryManagementView({
     }
     return a.name.localeCompare(b.name) * dir
   })
+  const pagedStructures = ss.slice((structurePage - 1) * salaryTablePageSize, structurePage * salaryTablePageSize)
+  const pagedComponents = filteredSalaryComponents.slice((componentPage - 1) * salaryTablePageSize, componentPage * salaryTablePageSize)
+  const pagedTemplates = ss.slice((templatePage - 1) * salaryTablePageSize, templatePage * salaryTablePageSize)
+  const pagedAssignments = assignmentRows.slice((assignmentPage - 1) * salaryTablePageSize, assignmentPage * salaryTablePageSize)
+
   const applyAssignFilters = () => {
     setAppliedAssignFilters({
       assignDept,
@@ -7852,7 +8072,7 @@ function SalaryManagementView({
                 </tr>
               </thead>
               <tbody>
-                {ss.map((s) => (
+                {pagedStructures.map((s) => (
                   <TrH key={s.id}>
                     <Td>
                       <span style={{ fontWeight: 600, color: F.brand }}>
@@ -7883,6 +8103,7 @@ function SalaryManagementView({
                 ))}
               </tbody>
             </table>
+            <Pagination page={structurePage} pageSize={salaryTablePageSize} total={ss.length} onPageChange={setStructurePage} />
           </div>
         </div>
       )}
@@ -8017,7 +8238,7 @@ function SalaryManagementView({
                     </td>
                   </tr>
                 ) : (
-                  filteredSalaryComponents.map((c) => (
+                  pagedComponents.map((c) => (
                     <TrH key={c.id}>
                       <Td>
                         <Badge
@@ -8075,6 +8296,7 @@ function SalaryManagementView({
                 )}
               </tbody>
             </table>
+            <Pagination page={componentPage} pageSize={salaryTablePageSize} total={filteredSalaryComponents.length} onPageChange={setComponentPage} />
           </div>
         </div>
       )}
@@ -8204,7 +8426,7 @@ function SalaryManagementView({
                 </tr>
               </thead>
               <tbody>
-                {ss.map((s) => {
+                {pagedTemplates.map((s) => {
                   const used = emps.filter((e) => e.salaryStructure === s.name).length
                   return (
                     <TrH key={s.id}>
@@ -8233,6 +8455,7 @@ function SalaryManagementView({
                 })}
               </tbody>
             </table>
+            <Pagination page={templatePage} pageSize={salaryTablePageSize} total={ss.length} onPageChange={setTemplatePage} />
           </div>
         </div>
       )}
@@ -8384,7 +8607,7 @@ function SalaryManagementView({
               <tbody>
                 {assignmentRows.length === 0 ? (
                   <tr><td colSpan={7} style={{ padding: 36, textAlign: "center", color: F.text3 }}>No employees match the assignment filters.</td></tr>
-                ) : assignmentRows.map((e) => {
+                ) : pagedAssignments.map((e) => {
                   const s = ss.find((x) => x.name === e.salaryStructure)
                   const pf = s ? Math.round(s.basic * 0.12) : 0
                   const tds = Math.round(e.grossSalary * 0.1)
@@ -8426,6 +8649,7 @@ function SalaryManagementView({
                 })}
               </tbody>
             </table>
+            <Pagination page={assignmentPage} pageSize={salaryTablePageSize} total={assignmentRows.length} onPageChange={setAssignmentPage} />
           </div>
         </div>
       )}
@@ -23955,6 +24179,8 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [persona, setPersona] = useState<Persona>("org_admin")
   const [view, setView] = useState("dashboard")
+  const [rangeFrom, setRangeFrom] = useState("")
+  const [rangeTo, setRangeTo] = useState("")
   const [emps, setEmps] = useState<Employee[]>(INIT_EMPS)
   const [ss, setSS] = useState<SalaryStructure[]>(INIT_SS)
   const [payruns, setPayruns] = useState<Payrun[]>(INIT_PAYRUNS)
@@ -24297,6 +24523,15 @@ export default function App() {
               />
             ) : (
               <>
+                {["payruns", "payslips", "documents", "reports", "audit"].includes(view) && (
+                  <DateRangeFilter
+                    from={rangeFrom}
+                    to={rangeTo}
+                    onFromChange={setRangeFrom}
+                    onToChange={setRangeTo}
+                    onApply={() => showToast(rangeFrom || rangeTo ? `Showing records from ${rangeFrom || "the beginning"} to ${rangeTo || "today"}` : "Showing all available records", "info")}
+                  />
+                )}
                 {persona === "org_admin" && (
                   <>
                     {view === "dashboard" && (
