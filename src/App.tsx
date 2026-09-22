@@ -142,6 +142,143 @@ function ContextDateRangeFilter() {
   return <DateRangeFilter from={dateFilter.from} to={dateFilter.to} onFromChange={dateFilter.onFromChange} onToChange={dateFilter.onToChange} onApply={dateFilter.onApply} />
 }
 
+type ManagedTable = {
+  id: string
+  label: string
+  columns: string[]
+  element: HTMLTableElement
+}
+
+/**
+ * A shared column manager for every data table in every workspace.  Tables in
+ * this prototype are intentionally authored close to their views, so deriving
+ * their headers here keeps the control available for existing and future views.
+ */
+function UniversalColumnCustomizer({ persona }: { persona: string }) {
+  const [tables, setTables] = useState<ManagedTable[]>([])
+  const [open, setOpen] = useState(false)
+  const [activeTableId, setActiveTableId] = useState("")
+  const [hiddenColumns, setHiddenColumns] = useState<Record<string, number[]>>({})
+  const [columnOrder, setColumnOrder] = useState<Record<string, number[]>>({})
+  const [draggedColumn, setDraggedColumn] = useState<number | null>(null)
+
+  const scanTables = useCallback(() => {
+    const tableElements = Array.from(document.querySelectorAll("main table")) as HTMLTableElement[]
+    const discovered = tableElements.map((element, index) => {
+      const headerRow = element.querySelector("thead tr:last-child")
+      const headerCells = headerRow ? Array.from(headerRow.children) as HTMLElement[] : []
+      headerCells.forEach((cell, columnIndex) => {
+        if (!cell.dataset.columnManagerOrigin) cell.dataset.columnManagerOrigin = String(columnIndex)
+      })
+      const columns = headerCells.length
+        ? [...headerCells].sort((a, b) => Number(a.dataset.columnManagerOrigin) - Number(b.dataset.columnManagerOrigin)).map((cell, columnIndex) => cell.textContent?.trim().replace(/\s+/g, " ") || `Column ${columnIndex + 1}`)
+        : []
+      const signature = columns.join("|").toLowerCase().replace(/[^a-z0-9|]/g, "")
+      const id = `${persona}-${signature || "table"}-${index}`
+      element.dataset.columnManagerId = id
+      const precedingTitle = element.parentElement?.previousElementSibling?.textContent?.trim()
+      return {
+        id,
+        label: precedingTitle && precedingTitle.length < 60 ? precedingTitle : columns.slice(0, 2).join(" · ") || `Table ${index + 1}`,
+        columns,
+        element,
+      }
+    }).filter((table) => table.columns.length > 0)
+    setTables(discovered)
+    setActiveTableId((current) => discovered.some((table) => table.id === current) ? current : discovered[0]?.id ?? "")
+  }, [persona])
+
+  useEffect(() => {
+    scanTables()
+    const main = document.querySelector("main")
+    if (!main) return
+    let frame = 0
+    const observer = new MutationObserver(() => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(scanTables)
+    })
+    observer.observe(main, { childList: true, subtree: true })
+    return () => {
+      observer.disconnect()
+      cancelAnimationFrame(frame)
+    }
+  }, [scanTables])
+
+  useEffect(() => {
+    tables.forEach((table) => {
+      const hidden = new Set(hiddenColumns[table.id] ?? [])
+      const order = columnOrder[table.id] ?? table.columns.map((_, index) => index)
+      table.element.querySelectorAll("tr").forEach((row) => {
+        const cells = Array.from(row.children) as HTMLElement[]
+        cells.forEach((cell, index) => {
+          if (!cell.dataset.columnManagerOrigin) cell.dataset.columnManagerOrigin = String(index)
+          cell.style.display = hidden.has(Number(cell.dataset.columnManagerOrigin)) ? "none" : ""
+        })
+        const orderedCells = [...cells].sort((a, b) => order.indexOf(Number(a.dataset.columnManagerOrigin)) - order.indexOf(Number(b.dataset.columnManagerOrigin)))
+        orderedCells.forEach((cell) => row.appendChild(cell))
+      })
+    })
+  }, [tables, hiddenColumns, columnOrder])
+
+  const activeTable = tables.find((table) => table.id === activeTableId)
+  const activeHidden = new Set(hiddenColumns[activeTableId] ?? [])
+  const activeOrder = columnOrder[activeTableId] ?? activeTable?.columns.map((_, index) => index) ?? []
+  const toggleColumn = (index: number) => {
+    if (!activeTable) return
+    // Keep at least one field visible, so a user can always recover the table.
+    if (!activeHidden.has(index) && activeHidden.size >= activeTable.columns.length - 1) return
+    setHiddenColumns((current) => ({
+      ...current,
+      [activeTable.id]: activeHidden.has(index)
+        ? (current[activeTable.id] ?? []).filter((item) => item !== index)
+        : [...(current[activeTable.id] ?? []), index],
+    }))
+  }
+  const reorderColumn = (sourceColumnIndex: number, targetColumnIndex: number) => {
+    if (!activeTable || sourceColumnIndex === targetColumnIndex) return
+    setColumnOrder((current) => {
+      const next = [...(current[activeTable.id] ?? activeOrder)]
+      const sourceIndex = next.indexOf(sourceColumnIndex)
+      const targetIndex = next.indexOf(targetColumnIndex)
+      if (sourceIndex < 0 || targetIndex < 0) return current
+      const [moved] = next.splice(sourceIndex, 1)
+      next.splice(targetIndex, 0, moved)
+      return { ...current, [activeTable.id]: next }
+    })
+  }
+  const resetActiveTable = () => {
+    if (!activeTable) return
+    setHiddenColumns((current) => ({ ...current, [activeTable.id]: [] }))
+    setColumnOrder((current) => ({ ...current, [activeTable.id]: activeTable.columns.map((_, index) => index) }))
+  }
+
+  if (!tables.length) return null
+
+  return <>
+    <button className="universal-column-trigger" type="button" onClick={() => setOpen(true)} aria-haspopup="dialog">
+      <span aria-hidden="true">☷</span> Customize columns
+    </button>
+    {open && <div className="universal-column-backdrop" onMouseDown={() => setOpen(false)}>
+      <section className="universal-column-dialog" role="dialog" aria-modal="true" aria-label="Customize table columns" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="universal-column-dialog-header">
+          <div><strong>Customize columns</strong><div>Show, hide, or rearrange the fields in this table.</div></div>
+          <button type="button" aria-label="Close column customizer" onClick={() => setOpen(false)}>×</button>
+        </div>
+        <div className="universal-column-list">
+          {activeOrder.map((columnIndex) => <div key={`${activeTable?.columns[columnIndex]}-${columnIndex}`} className={`universal-column-option${draggedColumn === columnIndex ? " is-dragging" : ""}`} draggable onDragStart={(event) => { event.dataTransfer.effectAllowed = "move"; setDraggedColumn(columnIndex) }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); if (draggedColumn !== null) reorderColumn(draggedColumn, columnIndex); setDraggedColumn(null) }} onDragEnd={() => setDraggedColumn(null)}>
+            <span className="universal-column-drag-handle" aria-hidden="true">⠿</span>
+            <label><input type="checkbox" checked={!activeHidden.has(columnIndex)} onChange={() => toggleColumn(columnIndex)} /><span>{activeTable?.columns[columnIndex]}</span></label>
+          </div>)}
+        </div>
+        <div className="universal-column-dialog-footer">
+          <button type="button" onClick={resetActiveTable}>Reset table</button>
+          <button type="button" className="primary" onClick={() => setOpen(false)}>Done</button>
+        </div>
+      </section>
+    </div>}
+  </>
+}
+
 function AdminWorkspaceHero({
   workspace,
   initials,
@@ -24730,6 +24867,7 @@ export default function App() {
               </>
             )}
             </DateFilterCtx.Provider>
+            <UniversalColumnCustomizer persona={persona} />
           </main>
         </div>
       </div>

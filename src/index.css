@@ -137,6 +137,76 @@ table {
   max-width: 100%;
 }
 
+/* Shared table column manager — available in every persona workspace. */
+.universal-column-trigger {
+  position: fixed;
+  right: 28px;
+  bottom: 24px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border: 1px solid #0057be;
+  border-radius: 7px;
+  background: var(--fiori-brand);
+  color: white;
+  box-shadow: 0 5px 16px rgba(0, 70, 150, 0.24);
+  font: 700 13px/1 'Inter', Arial, sans-serif;
+  cursor: pointer;
+}
+
+.universal-column-trigger:hover { background: var(--fiori-brand-hover); }
+.universal-column-trigger span { font-size: 18px; line-height: 10px; transform: rotate(90deg); }
+
+.universal-column-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.36);
+}
+
+.universal-column-dialog {
+  width: min(430px, 100%);
+  max-height: min(620px, calc(100vh - 40px));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--fiori-border);
+  border-radius: 10px;
+  background: white;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.25);
+  overflow: hidden;
+}
+
+.universal-column-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--fiori-border);
+}
+.universal-column-dialog-header strong { display: block; color: var(--fiori-text-1); font-size: 16px; }
+.universal-column-dialog-header div div { margin-top: 4px; color: var(--fiori-text-2); font-size: 12px; }
+.universal-column-dialog-header button { border: 0; background: transparent; color: var(--fiori-text-2); font-size: 25px; line-height: 18px; cursor: pointer; }
+
+.universal-column-list { min-height: 80px; overflow: auto; border-top: 1px solid var(--fiori-border); border-bottom: 1px solid var(--fiori-border); }
+.universal-column-option { display: flex; align-items: center; gap: 10px; padding: 9px 20px 9px 13px; border-bottom: 1px solid #edf0f2; color: var(--fiori-text-1); font-size: 13px; cursor: grab; }
+.universal-column-option:last-child { border-bottom: 0; }
+.universal-column-option.is-dragging { opacity: .45; background: var(--fiori-info-bg); }
+.universal-column-option label { display: flex; flex: 1; align-items: center; gap: 10px; cursor: pointer; }
+.universal-column-option input { width: 15px; height: 15px; accent-color: var(--fiori-brand); }
+.universal-column-drag-handle { color: var(--fiori-text-3); font-size: 19px; line-height: 1; letter-spacing: -3px; pointer-events: none; }
+.universal-column-dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; }
+.universal-column-dialog-footer button { padding: 8px 12px; border: 1px solid var(--fiori-border-strong); border-radius: 5px; background: white; color: var(--fiori-text-1); font: 700 12px 'Inter', Arial, sans-serif; cursor: pointer; }
+.universal-column-dialog-footer .primary { border-color: var(--fiori-brand); background: var(--fiori-brand); color: white; }
+
+@media (max-width: 720px) {
+  .universal-column-trigger { right: 16px; bottom: 16px; }
+}
+
 /* Employee salary summary: apply the total-row fill to every cell so the
    Cost to Company band reaches the annual amount at the far right. */
 tr:has(> td[colspan="2"]) > td {
