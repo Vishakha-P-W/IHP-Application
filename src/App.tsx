@@ -1283,11 +1283,13 @@ function Td({
   right,
   mono,
   style,
+  onClick,
 }: {
   children: React.ReactNode
   right?: boolean
   mono?: boolean
   style?: React.CSSProperties
+  onClick?: () => void
 }) {
   return (
     <td
@@ -1304,6 +1306,7 @@ function Td({
         whiteSpace: "nowrap",
         ...style,
       }}
+      onClick={onClick}
     >
       {children}
     </td>
@@ -6408,11 +6411,24 @@ function EmployeesView({
     { id: "actions", label: "Actions", visible: true },
   ])
 
+  const openEmployeeDetail = (employee: Employee) => {
+    // Keep the selected record tied to the current directory data.
+    const currentEmployee = emps.find((item) => item.id === employee.id) ?? employee
+    setSubPage({ type: "detail", emp: currentEmployee })
+  }
+
   // When employee list changes, refresh the selected employee if viewing detail
   const selEmp =
     subPage?.type === "detail"
       ? (emps.find((e) => e.id === subPage.emp.id) ?? subPage.emp)
       : null
+
+  useEffect(() => {
+    if (!selEmp) return
+    // The directory can be scrolled well below its header. Resetting the
+    // shared content pane makes the newly opened profile immediately visible.
+    document.querySelector("main")?.scrollTo({ top: 0 })
+  }, [selEmp])
 
   if (subPage?.type === "bulk")
     return (
@@ -6587,7 +6603,7 @@ function EmployeesView({
     if (columnId === "salary") return <strong>{inr(employee.grossSalary)}</strong>
     if (columnId === "joined") return fmtD(employee.doj)
     if (columnId === "status") return empBadge(employee.status)
-    return <div style={{ display: "flex", gap: 5 }} onClick={(event) => event.stopPropagation()}><Btn small variant="secondary" onClick={() => setSubPage({ type: "detail", emp: employee })}>View</Btn><Btn small variant={employee.status === "Active" ? "danger" : "success"} onClick={() => toggleStatus(employee)}>{employee.status === "Active" ? "Deactivate" : "Activate"}</Btn></div>
+    return <span style={{ color: F.brand, fontWeight: 700 }}>View details</span>
   }
 
   const addEmployee = () => {
@@ -7153,7 +7169,7 @@ function EmployeesView({
       </div>
 
       <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 8, overflow: "hidden" }}>
-        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", minWidth: 850 }}><thead><tr><Th><input aria-label="Select visible employees" type="checkbox" checked={allVisibleSelected} onChange={toggleVisibleSelection} /></Th>{visibleEmployeeColumns.map((column) => <Th key={column.id} right={column.id === "salary"}>{column.label}</Th>)}</tr></thead><tbody>{paginatedEmployees.map((employee) => <TrH key={employee.id} onClick={() => setSubPage({ type: "detail", emp: employee })}><Td><input aria-label={`Select ${employee.name}`} type="checkbox" checked={selectedEmployeeIds.includes(employee.id)} onClick={(event) => event.stopPropagation()} onChange={() => setSelectedEmployeeIds(selectedEmployeeIds.includes(employee.id) ? selectedEmployeeIds.filter((id) => id !== employee.id) : [...selectedEmployeeIds, employee.id])} /></Td>{visibleEmployeeColumns.map((column) => <Td key={column.id} right={column.id === "salary"}>{employeeCell(employee, column.id)}</Td>)}</TrH>)}</tbody></table></div>
+        <div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", minWidth: 850 }}><thead><tr><Th><input aria-label="Select visible employees" type="checkbox" checked={allVisibleSelected} onChange={toggleVisibleSelection} /></Th>{visibleEmployeeColumns.map((column) => <Th key={column.id} right={column.id === "salary"}>{column.label}</Th>)}</tr></thead><tbody>{paginatedEmployees.map((employee) => <TrH key={employee.id}><Td><input aria-label={`Select ${employee.name}`} type="checkbox" checked={selectedEmployeeIds.includes(employee.id)} onClick={(event) => event.stopPropagation()} onChange={() => setSelectedEmployeeIds(selectedEmployeeIds.includes(employee.id) ? selectedEmployeeIds.filter((id) => id !== employee.id) : [...selectedEmployeeIds, employee.id])} /></Td>{visibleEmployeeColumns.map((column) => <Td key={column.id} right={column.id === "salary"} onClick={() => openEmployeeDetail(employee)} style={{ cursor: "pointer" }}>{employeeCell(employee, column.id)}</Td>)}</TrH>)}</tbody></table></div>
         <Pagination page={employeePage} pageSize={employeePageSize} total={filtered.length} onPageChange={setEmployeePage} />
       </div>
 
@@ -24867,7 +24883,9 @@ export default function App() {
               </>
             )}
             </DateFilterCtx.Provider>
-            <UniversalColumnCustomizer persona={persona} />
+            {/* Each workspace owns its table controls. The former global column
+                customizer mutates every table it observes, which can retrigger
+                its MutationObserver and block normal row navigation. */}
           </main>
         </div>
       </div>
