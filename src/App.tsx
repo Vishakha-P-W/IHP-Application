@@ -8,23 +8,23 @@ import React, {
 } from "react"
 
 const F = {
-  shell: "#354A5E",
+  shell: "#FFFFFF",
   brand: "#0070F2",
-  brandHover: "#0854A0",
+  brandHover: "#0064D9",
   pageBg: "#F5F6F7",
   card: "#FFFFFF",
-  text1: "#32363A",
-  text2: "#6A6D70",
-  text3: "#89919A",
-  border: "#D9D9D9",
-  success: "#107E3E",
-  successBg: "#F1FDF6",
-  warning: "#E9730C",
-  warningBg: "#FEF7F1",
-  error: "#BB0000",
-  errorBg: "#FFEBEB",
-  infoBg: "#EBF5FB",
-  highlight: "#EBF5FB",
+  text1: "#1D2D3E",
+  text2: "#475E75",
+  text3: "#5B738B",
+  border: "#D5DADD",
+  success: "#188918",
+  successBg: "#F5FAE5",
+  warning: "#E76500",
+  warningBg: "#FFF8D6",
+  error: "#AA0808",
+  errorBg: "#FFEAF4",
+  infoBg: "#E1F4FF",
+  highlight: "#E1F4FF",
 }
 
 type ToastType = "success" | "error" | "info" | "warning"
@@ -73,6 +73,7 @@ function LiveClock() {
 
   return (
     <div
+      className="sap-shell-clock"
       style={{
         display: "flex",
         alignItems: "center",
@@ -118,10 +119,10 @@ function DateRangeFilter({
   onApply: () => void
 }) {
   return (
-    <div style={{ padding: "0", marginBottom: 0, display: "flex", alignItems: "end", gap: 8, flexWrap: "nowrap", whiteSpace: "nowrap" }}>
-      <div style={{ fontSize: 12, fontWeight: 800, color: F.text2, padding: "0 4px 9px 0" }}>Record date</div>
-      <label style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>From<input aria-label="Filter from date" type="date" value={from} onChange={(event) => onFromChange(event.target.value)} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
-      <label style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>To<input aria-label="Filter to date" type="date" value={to} onChange={(event) => onToChange(event.target.value)} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
+    <div className="sap-date-filter" style={{ padding: "0", marginBottom: 0, display: "flex", alignItems: "end", gap: 8, flexWrap: "nowrap", whiteSpace: "nowrap" }}>
+      <div className="sap-date-filter-title" style={{ fontSize: 12, fontWeight: 800, color: F.text2, padding: "0 4px 9px 0" }}>Record date</div>
+      <label className="sap-date-field" style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>From<input aria-label="Filter from date" type="date" value={from} onChange={(event) => onFromChange(event.target.value)} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
+      <label className="sap-date-field" style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>To<input aria-label="Filter to date" type="date" value={to} onChange={(event) => onToChange(event.target.value)} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
       <Btn small onClick={onApply} style={{ height: 34, padding: "0 14px" }}>Apply range</Btn>
     </div>
   )
@@ -154,7 +155,7 @@ type ManagedTable = {
  * this prototype are intentionally authored close to their views, so deriving
  * their headers here keeps the control available for existing and future views.
  */
-function UniversalColumnCustomizer({ persona }: { persona: string }) {
+function UniversalColumnCustomizer({ persona, inline = false }: { persona: string; inline?: boolean }) {
   const [tables, setTables] = useState<ManagedTable[]>([])
   const [open, setOpen] = useState(false)
   const [activeTableId, setActiveTableId] = useState("")
@@ -255,8 +256,8 @@ function UniversalColumnCustomizer({ persona }: { persona: string }) {
   if (!tables.length) return null
 
   return <>
-    <button className="universal-column-trigger" type="button" onClick={() => setOpen(true)} aria-haspopup="dialog">
-      <span aria-hidden="true">☷</span> Customize columns
+    <button className={`universal-column-trigger${inline ? " is-inline" : ""}`} type="button" onClick={() => setOpen(true)} aria-haspopup="dialog">
+      <span aria-hidden="true">↔</span> Customize columns
     </button>
     {open && <div className="universal-column-backdrop" onMouseDown={() => setOpen(false)}>
       <section className="universal-column-dialog" role="dialog" aria-modal="true" aria-label="Customize table columns" onMouseDown={(event) => event.stopPropagation()}>
@@ -1080,6 +1081,7 @@ function Badge({
 }) {
   return (
     <span
+      className="sap-object-status"
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -1165,6 +1167,7 @@ function Tile({
 }) {
   return (
     <div
+      className="sap-kpi-tile"
       style={{
         background: F.card,
         border: `1px solid ${F.border}`,
@@ -1233,7 +1236,7 @@ const iSt: React.CSSProperties = {
 
 function Fld({ label, children }: { label: string children: React.ReactNode }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div className="sap-field" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <label
         style={{
           fontSize: 11,
@@ -1284,15 +1287,21 @@ function Td({
   mono,
   style,
   onClick,
+  colSpan,
+  rowSpan,
 }: {
   children: React.ReactNode
   right?: boolean
   mono?: boolean
   style?: React.CSSProperties
   onClick?: () => void
+  colSpan?: number
+  rowSpan?: number
 }) {
   return (
     <td
+      colSpan={colSpan}
+      rowSpan={rowSpan}
       style={{
         padding: "11px 14px",
         textAlign: right ? "right" : "left",
@@ -1347,6 +1356,7 @@ function PH({
 }) {
   return (
     <div
+      className="sap-dynamic-page-title"
       style={{
         background: F.card,
         border: `1px solid ${F.border}`,
@@ -1382,7 +1392,7 @@ type BtnVariant = "primary" | "secondary" | "danger" | "ghost" | "success"
 function Pagination({ page, pageSize, total, onPageChange }: { page: number; pageSize: number; total: number; onPageChange: (page: number) => void }) {
   const pages = Math.max(1, Math.ceil(total / pageSize))
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderTop: `1px solid ${F.border}`, fontSize: 12, color: F.text2 }}>
+    <div className="sap-pagination" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderTop: `1px solid ${F.border}`, fontSize: 12, color: F.text2 }}>
       <span>Showing {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} of {total}</span>
       <div style={{ display: "flex", gap: 6 }}>
         <Btn small variant="secondary" disabled={page === 1} onClick={() => onPageChange(page - 1)}>Previous</Btn>
@@ -1435,6 +1445,7 @@ function Btn({
   }
   return (
     <button
+      className={`sap-button sap-button-${variant}${small ? " sap-button-small" : ""}`}
       onClick={onClick}
       disabled={disabled}
       title={
@@ -1475,6 +1486,7 @@ function TabBar({
 }) {
   return (
     <div
+      className="sap-icon-tab-bar"
       style={{
         display: "flex",
         borderBottom: `2px solid ${F.border}`,
@@ -1509,6 +1521,7 @@ function TabBar({
 function SH({ children }: { children: React.ReactNode }) {
   return (
     <div
+      className="sap-section-label"
       style={{
         fontSize: 11,
         fontWeight: 700,
@@ -1776,6 +1789,7 @@ function SlidePanel({
 }) {
   return (
     <div
+      className="sap-overlay sap-side-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -1787,6 +1801,7 @@ function SlidePanel({
       onClick={onClose}
     >
       <div
+        className="sap-side-panel"
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 440,
@@ -1862,6 +1877,7 @@ function Modal({
 }) {
   return (
     <div
+      className="sap-overlay sap-modal-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -1874,6 +1890,7 @@ function Modal({
       onClick={onClose}
     >
       <div
+        className="sap-dialog"
         onClick={(e) => e.stopPropagation()}
         style={{
           background: F.card,
@@ -2108,7 +2125,7 @@ function PayslipSheet({
       >
         <div
           style={{
-            background: F.shell,
+            background: "#1D2D3E",
             color: "#fff",
             padding: "16px 20px",
             display: "flex",
@@ -2234,6 +2251,7 @@ function Confirm({
 }) {
   return (
     <div
+      className="sap-overlay sap-confirm-overlay"
       style={{
         position: "fixed",
         inset: 0,
@@ -2245,6 +2263,7 @@ function Confirm({
       }}
     >
       <div
+        className="sap-message-box"
         style={{
           background: F.card,
           borderRadius: 4,
@@ -2285,6 +2304,7 @@ function Toasts({ toasts }: { toasts: ToastItem[] }) {
   }
   return (
     <div
+      className="sap-message-toasts"
       style={{
         position: "fixed",
         bottom: 24,
@@ -2299,6 +2319,7 @@ function Toasts({ toasts }: { toasts: ToastItem[] }) {
         const [color, bg] = colors[t.type]
         return (
           <div
+            className={`sap-message-strip sap-message-strip-${t.type}`}
             key={t.id}
             style={{
               background: bg,
@@ -3947,17 +3968,26 @@ function EmployeeDetailPage({
               fontSize: 13,
               fontWeight: 700,
               color: F.text1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
             }}
           >
-            <span>Basic Information</span><button aria-label="Edit basic information" onClick={() => { setDraft({ ...emp }); setEditing(true) }} style={{ border: "none", background: "transparent", color: F.brand, cursor: "pointer", fontSize: 17 }}>✎</button>
+            <span>Basic Information</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {editing && <Btn small variant="success" onClick={save}>Save</Btn>}
+              <button aria-label="Edit basic information" onClick={() => { setDraft({ ...emp }); setEditing(true) }} style={{ border: "none", background: "transparent", color: F.brand, cursor: "pointer", fontSize: 17 }}>✎</button>
+            </span>
           </div>
           <div
+            className="employee-information-grid"
             style={{
               padding: "16px 20px",
               display: editing ? "flex" : "grid",
-              gridTemplateColumns: editing ? undefined : "1fr 1fr",
+              gridTemplateColumns: editing ? undefined : "minmax(0, 1fr) minmax(0, 1fr)",
               flexDirection: "column",
-              gap: 0,
+              columnGap: editing ? undefined : 72,
+              rowGap: 0,
             }}
           >
             {editing ? (
@@ -4094,7 +4124,8 @@ function EmployeeDetailPage({
                     justifyContent: "space-between",
                     padding: "10px 0",
                     borderBottom: `1px solid ${F.border}`,
-                    width: "50%",
+                    width: "100%",
+                    minWidth: 0,
                   }}
                 >
                   <span style={{ fontSize: 12, color: F.text2 }}>{l}</span>
@@ -4104,7 +4135,9 @@ function EmployeeDetailPage({
                       fontWeight: 600,
                       color: F.text1,
                       textAlign: "right",
-                      maxWidth: "60%",
+                      maxWidth: "65%",
+                      minWidth: 0,
+                      overflowWrap: "anywhere",
                     }}
                   >
                     {v}
@@ -4298,13 +4331,13 @@ function EmployeeDetailPage({
       {activeTab === "overview" && <>
         <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, padding: "20px 22px", marginTop: 14 }}>
           <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 18, display: "flex", justifyContent: "space-between" }}><span>Statutory Information</span><span>{editingStatutory && <Btn small variant="success" onClick={() => { setEditingStatutory(false); toast("Statutory information saved", "success") }}>Save</Btn>} <button aria-label="Edit statutory information" onClick={() => setEditingStatutory(!editingStatutory)} style={{ border: "none", background: "transparent", color: F.brand, cursor: "pointer", fontSize: 17 }}>✎</button></span></div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 72, rowGap: 16 }}>
+          <div className="employee-information-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: 72, rowGap: 16 }}>
             {[ ["EPF rate (%)", "pfRate"], ["TDS rate (%)", "tdsRate"], ["Professional Tax", "professionalTax"], ["Payment Method", "paymentMethod"], ["Account Ending", "bankAccount"], ["IFSC Code", "ifsc"] ].map(([label, field]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "235px 1fr", fontSize: 13, alignItems: "center" }}><span style={{ color: F.text2 }}>{label}</span>{editingStatutory ? (field === "paymentMethod" ? <select style={iSt} value={payroll.paymentMethod} onChange={(e) => setPayroll({ ...payroll, paymentMethod: e.target.value })}><option>Bank transfer</option><option>Cheque</option><option>Cash</option></select> : <input type={field === "ifsc" || field === "bankAccount" ? "text" : "number"} style={iSt} value={payroll[field as "pfRate" | "tdsRate" | "professionalTax" | "bankAccount" | "ifsc"]} onChange={(e) => setPayroll({ ...payroll, [field]: field === "ifsc" || field === "bankAccount" ? e.target.value : Number(e.target.value) })} />) : <strong>{String(payroll[field as "pfRate" | "tdsRate" | "professionalTax" | "paymentMethod" | "bankAccount" | "ifsc"])}</strong>}</div>)}
           </div>
         </div>
         <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, padding: "20px 22px", marginTop: 14 }}>
           <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 18, display: "flex", justifyContent: "space-between" }}><span>Personal Information</span><span>{editingPersonal && <Btn small variant="success" onClick={() => { setEditingPersonal(false); toast("Personal information saved", "success") }}>Save</Btn>} <button aria-label="Edit personal information" onClick={() => setEditingPersonal(!editingPersonal)} style={{ border: "none", background: "transparent", color: F.brand, cursor: "pointer", fontSize: 17 }}>✎</button></span></div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", columnGap: 72, rowGap: 16 }}>
+          <div className="employee-information-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: 72, rowGap: 16 }}>
             {[ ["Date of Birth", "dateOfBirth"], ["Personal Email", "personalEmail"], ["Father's Name", "fatherName"], ["Residential Address", "address"], ["PAN", "pan"], ["Differently Abled Type", "differentlyAbled"] ].map(([label, field]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "235px 1fr", fontSize: 13, alignItems: "center" }}><span style={{ color: F.text2 }}>{label}</span>{editingPersonal ? <input style={iSt} value={personalInfo[field as keyof typeof personalInfo]} onChange={(e) => setPersonalInfo({ ...personalInfo, [field]: e.target.value })} /> : <strong>{personalInfo[field as keyof typeof personalInfo]}</strong>}</div>)}
           </div>
         </div>
@@ -6118,8 +6151,8 @@ Deepak Joshi,deepak.joshi@naxrita.in,Finance,Finance Analyst,2026-09-01,Full-Tim
             }}
           >
             <div
-              style={{
-                padding: "12px 18px",
+            style={{
+              padding: "12px 18px",
                 borderBottom: `1px solid ${F.border}`,
                 display: "flex",
                 justifyContent: "space-between",
@@ -11688,6 +11721,7 @@ function ReportsView({
 }) {
   const toast = useToast()
   const [active, setActive] = useState("payroll_summary")
+  const [reportDraft, setReportDraft] = useState("payroll_summary")
   const [period, setPeriod] = useState("July 2026")
   const completedPeriods = payruns
     .filter((p) => isFinalizedPayrun(p.status))
@@ -11710,45 +11744,27 @@ function ReportsView({
         title="Reports"
         sub="Payroll, earnings, deduction, and LOP reports"
         action={
-          <Btn
-            variant="secondary"
-            onClick={() => toast("All reports exported", "success")}
-          >
-            Export All
-          </Btn>
+          <>
+            <Btn
+              variant="secondary"
+              onClick={() => toast("All reports exported", "success")}
+            >
+              Export All
+            </Btn>
+            <UniversalColumnCustomizer persona="reports" inline />
+          </>
         }
       />
-      <div
-        style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}
-      >
-        <div
-          style={{
-            background: F.card,
-            border: `1px solid ${F.border}`,
-            borderRadius: 4,
-          }}
-        >
-          {REPORT_LIST.map((r) => (
-            <div
-              key={r.id}
-              onClick={() => setActive(r.id)}
-              style={{
-                padding: "11px 16px",
-                cursor: "pointer",
-                fontSize: 13,
-                fontWeight: active === r.id ? 600 : 400,
-                color: active === r.id ? F.brand : F.text1,
-                background: active === r.id ? F.highlight : "transparent",
-                borderLeft: `3px solid ${
-                  active === r.id ? F.brand : "transparent"
-                }`,
-                borderBottom: `1px solid ${F.border}`,
-              }}
-            >
-              {r.label}
-            </div>
-          ))}
-        </div>
+      <div className="report-type-selector">
+        <label>
+          Report type
+          <select value={reportDraft} onChange={(event) => setReportDraft(event.target.value)}>
+            {REPORT_LIST.map((report) => <option key={report.id} value={report.id}>{report.label}</option>)}
+          </select>
+        </label>
+        <Btn onClick={() => setActive(reportDraft)}>Go</Btn>
+      </div>
+      <div className="report-content">
         <div
           style={{
             background: F.card,
@@ -11758,6 +11774,7 @@ function ReportsView({
           }}
         >
           <div
+            className="report-toolbar"
             style={{
               padding: "12px 18px",
               borderBottom: `1px solid ${F.border}`,
@@ -11766,20 +11783,23 @@ function ReportsView({
               alignItems: "center",
             }}
           >
-            <span style={{ fontSize: 14, fontWeight: 600, color: F.text1 }}>
+            <span className="report-toolbar-title" style={{ fontSize: 14, fontWeight: 600, color: F.text1 }}>
               {REPORT_LIST.find((r) => r.id === active)?.label}
             </span>
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div className="report-toolbar-actions" style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
               <ContextDateRangeFilter />
-              <select
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-                style={{ ...iSt, width: 160 }}
-              >
-                {completedPeriods.map((p) => (
-                  <option key={p}>{p}</option>
-                ))}
-              </select>
+              <label className="report-period-field">
+                Pay period
+                <select
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value)}
+                  style={{ ...iSt, width: 160 }}
+                >
+                  {completedPeriods.map((p) => (
+                    <option key={p}>{p}</option>
+                  ))}
+                </select>
+              </label>
               <Btn
                 small
                 onClick={() =>
@@ -18003,8 +18023,9 @@ function NotificationBell({
   }
 
   return (
-    <div style={{ position: "relative", flexShrink: 0 }}>
+    <div className="sap-notification-center" style={{ position: "relative", flexShrink: 0 }}>
       <button
+        className="sap-shell-action"
         onClick={() => setOpen((o) => !o)}
         title="Notifications"
         style={{
@@ -18040,7 +18061,7 @@ function NotificationBell({
           height="18"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#fff"
+          stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -18384,6 +18405,7 @@ function ProfileMenu({
   const [open, setOpen] = useState(false)
   return (
     <div
+      className="sap-profile-menu"
       style={{
         position: "relative",
         paddingLeft: 10,
@@ -18391,6 +18413,7 @@ function ProfileMenu({
       }}
     >
       <button
+        className="sap-profile-trigger"
         onClick={() => setOpen(!open)}
         title="Open profile menu"
         style={{
@@ -18477,7 +18500,7 @@ function ProfileMenu({
             <div
               style={{
                 padding: "14px 16px",
-                background: F.shell,
+                background: "#1D2D3E",
                 borderBottom: `1px solid rgba(255,255,255,0.1)`,
               }}
             >
@@ -23998,6 +24021,7 @@ function LoginPage({ onLogin }: { onLogin: (persona: Persona) => void }) {
 
   return (
     <div
+      className="sap-login-page"
       style={{
         minHeight: "100vh",
         display: "flex",
@@ -24012,6 +24036,7 @@ function LoginPage({ onLogin }: { onLogin: (persona: Persona) => void }) {
     >
       {/* Enterprise Login Card */}
       <div
+        className="sap-login-card"
         style={{
           width: "100%",
           maxWidth: 440,
@@ -24526,6 +24551,7 @@ export default function App() {
   return (
     <ToastCtx.Provider value={showToast}>
       <div
+        className="sap-app-shell"
         style={{
           display: "flex",
           flexDirection: "column",
@@ -24536,6 +24562,7 @@ export default function App() {
         }}
       >
         <header
+          className="sap-shell-bar"
           style={{
             height: 48,
             background: F.shell,
@@ -24544,17 +24571,19 @@ export default function App() {
             paddingInline: 16,
             gap: 10,
             flexShrink: 0,
-            boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
+            boxShadow: "0 1px 0 #d5dadd, 0 2px 8px rgba(34,54,73,0.08)",
             zIndex: 100,
           }}
         >
           <button
             onClick={() => setSidebarOpen((o) => !o)}
             title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+            aria-expanded={sidebarOpen}
             style={{
               background: "none",
               border: "none",
-              color: "rgba(255,255,255,0.65)",
+              color: F.text2,
               cursor: "pointer",
               padding: 6,
               borderRadius: 4,
@@ -24564,7 +24593,7 @@ export default function App() {
               flexShrink: 0,
             }}
             onMouseEnter={(e) =>
-              (e.currentTarget.style.background = "rgba(255,255,255,0.1)")
+              (e.currentTarget.style.background = F.highlight)
             }
             onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
           >
@@ -24622,7 +24651,7 @@ export default function App() {
                 style={{
                   fontSize: 13,
                   fontWeight: 800,
-                  color: "#fff",
+                  color: F.text1,
                   lineHeight: 1.1,
                 }}
               >
@@ -24631,7 +24660,7 @@ export default function App() {
               <div
                 style={{
                   fontSize: 9,
-                  color: "rgba(255,255,255,0.45)",
+                  color: F.text3,
                   letterSpacing: "0.08em",
                   textTransform: "uppercase",
                 }}
@@ -24657,6 +24686,7 @@ export default function App() {
         </header>
 
         <div
+          className={`sap-workspace${sidebarOpen ? "" : " is-collapsed"}`}
           style={{
             display: "grid",
             gridTemplateColumns: sidebarOpen ? "220px minmax(0, 1fr)" : "56px minmax(0, 1fr)",
@@ -24667,9 +24697,10 @@ export default function App() {
           }}
         >
           <nav
+            className="sap-side-navigation"
             style={{
               width: "100%",
-              background: F.shell,
+              background: F.card,
               display: "flex",
               flexDirection: "column",
               flexShrink: 0,
@@ -24689,6 +24720,7 @@ export default function App() {
                   style={{ position: "relative" }}
                 >
                   <button
+                    className={`sap-nav-item${active ? " is-active" : ""}`}
                     onClick={() => setView(item.id)}
                     title={item.label}
                     style={{
@@ -24697,15 +24729,13 @@ export default function App() {
                       gap: 12,
                       padding: sidebarOpen ? "10px 16px" : "11px 0",
                       justifyContent: sidebarOpen ? "flex-start" : "center",
-                      background: active
-                        ? "rgba(255,255,255,0.18)"
-                        : "transparent",
+                      background: active ? F.highlight : "transparent",
                       border: "none",
                       borderLeft: `3px solid ${
                         active ? F.brand : "transparent"
                       }`,
                       cursor: "pointer",
-                      color: active ? "#FFFFFF" : "rgba(255,255,255,0.70)",
+                      color: active ? F.brandHover : F.text2,
                       textAlign: "left",
                       fontSize: 13,
                       fontWeight: active ? 600 : 400,
@@ -24718,7 +24748,7 @@ export default function App() {
                     onMouseEnter={(e) => {
                       if (!active)
                         e.currentTarget.style.background =
-                          "rgba(255,255,255,0.10)"
+                            F.pageBg
                     }}
                     onMouseLeave={(e) => {
                       if (!active)
@@ -24745,14 +24775,21 @@ export default function App() {
           </nav>
 
           <main
+            className="sap-main-content"
             style={{
               flex: "1 1 0",
               minWidth: 0,
               overflow: "auto",
-              padding: "22px 26px",
+              padding: "0 24px 28px",
               containerType: "inline-size",
             }}
           >
+            <div className="sap-context-bar" aria-label="Breadcrumb">
+              <span>Home</span><span className="sap-context-separator">/</span>
+              <strong>{navLabelForView(view)}</strong>
+              <span className="sap-context-spacer" />
+              <span className="sap-context-role">{personaRole[persona]}</span>
+            </div>
             <DateFilterCtx.Provider value={{ active: ["payruns", "payslips", "documents", "reports", "audit"].includes(view), from: rangeFrom, to: rangeTo, onFromChange: setRangeFrom, onToChange: setRangeTo, onApply: () => showToast(rangeFrom || rangeTo ? `Showing records from ${rangeFrom || "the beginning"} to ${rangeTo || "today"}` : "Showing all available records", "info") }}>
             {view === "profile" ? (
               <UnifiedProfileView
