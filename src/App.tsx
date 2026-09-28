@@ -24465,6 +24465,34 @@ export default function App() {
     Record<"product_admin" | "org_admin", AdminProfileData>
   >(DEFAULT_ADMIN_PROFILES)
   const [toasts, setToasts] = useState<ToastItem[]>([])
+  // Numeric fields are non-negative throughout the application.  Enforce this
+  // centrally so newly added forms inherit the same rule as existing payroll,
+  // salary, tax, and employee inputs.
+  useEffect(() => {
+    const normalizeNumericInputs = () => {
+      document.querySelectorAll<HTMLInputElement>('input[type="number"]').forEach((input) => {
+        if (!input.hasAttribute("min")) input.min = "0"
+        if (input.value !== "" && Number(input.value) < 0) input.value = "0"
+      })
+    }
+    const enforceNonNegative = (event: Event) => {
+      const input = event.target as HTMLInputElement | null
+      if (!input || input.tagName !== "INPUT" || input.type !== "number") return
+      if (input.value !== "" && (!Number.isFinite(Number(input.value)) || Number(input.value) < 0)) {
+        input.value = Number.isFinite(Number(input.value)) ? "0" : ""
+      }
+    }
+    normalizeNumericInputs()
+    document.addEventListener("input", enforceNonNegative, true)
+    document.addEventListener("change", enforceNonNegative, true)
+    const observer = new MutationObserver(normalizeNumericInputs)
+    observer.observe(document.body, { childList: true, subtree: true })
+    return () => {
+      document.removeEventListener("input", enforceNonNegative, true)
+      document.removeEventListener("change", enforceNonNegative, true)
+      observer.disconnect()
+    }
+  }, [])
   const showToast = useCallback((msg: string, type: ToastType = "info") => {
     const id = Date.now()
     setToasts((t) => [...t, { id, msg, type }])
