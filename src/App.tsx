@@ -6392,6 +6392,7 @@ function EmployeesView({
   const [dojYear, setDojYear] = useState("All")
   const [sortBy, setSortBy] = useState("name-asc")
   const [employeePage, setEmployeePage] = useState(1)
+  const [hasRunEmployeeSearch, setHasRunEmployeeSearch] = useState(false)
   const employeePageSize = 10
   const [appliedEmpFilters, setAppliedEmpFilters] = useState({
     search: "",
@@ -6519,6 +6520,7 @@ function EmployeesView({
     (appliedEmpFilters.sortBy !== "name-asc" ? 1 : 0)
 
   const applyEmpFilters = () => {
+    setHasRunEmployeeSearch(true)
     setEmployeePage(1)
     setAppliedEmpFilters({
       search,
@@ -6534,6 +6536,7 @@ function EmployeesView({
     })
   }
   const clearEmpFilters = () => {
+    setHasRunEmployeeSearch(false)
     setEmployeePage(1)
     setSearch("")
     setDeptF("All")
@@ -6559,7 +6562,7 @@ function EmployeesView({
     })
   }
 
-  const filtered = emps.filter((e) => {
+  const filtered = hasRunEmployeeSearch ? emps.filter((e) => {
     const nameMatch = searchMatches(appliedEmpFilters.search, [
       e.name,
       e.id,
@@ -6589,7 +6592,7 @@ function EmployeesView({
       return a.department.localeCompare(b.department) * dir
     }
     return a.name.localeCompare(b.name) * dir
-  })
+  }) : []
   const paginatedEmployees = filtered.slice((employeePage - 1) * employeePageSize, employeePage * employeePageSize)
   const allVisibleSelected = paginatedEmployees.length > 0 && paginatedEmployees.every((employee) => selectedEmployeeIds.includes(employee.id))
   const toggleVisibleSelection = () => setSelectedEmployeeIds(allVisibleSelected ? selectedEmployeeIds.filter((id) => !paginatedEmployees.some((employee) => employee.id === id)) : Array.from(new Set([...selectedEmployeeIds, ...paginatedEmployees.map((employee) => employee.id)])))
@@ -7727,6 +7730,7 @@ function SalaryManagementView({
   const [salaryNote, setSalaryNote] = useState("August regular monthly salary cycle")
   const [wizardSearch, setWizardSearch] = useState("")
   const [appliedWizardSearch, setAppliedWizardSearch] = useState("")
+  const [hasRunWizardSearch, setHasRunWizardSearch] = useState(false)
   const [wizardSelectedIds, setWizardSelectedIds] = useState<string[]>([])
   const [traceRow, setTraceRow] = useState<{
     emp: Employee
@@ -7768,6 +7772,7 @@ function SalaryManagementView({
     active: "All",
   })
   const [componentFilters, setComponentFilters] = useState(componentFilterDraft)
+  const [hasRunComponentSearch, setHasRunComponentSearch] = useState(false)
   const [assignDept, setAssignDept] = useState("All")
   const [assignType, setAssignType] = useState("All")
   const [assignDesignation, setAssignDesignation] = useState("All")
@@ -7780,6 +7785,7 @@ function SalaryManagementView({
     assignSearch: "",
     assignSort: "name-asc",
   })
+  const [hasRunAssignmentSearch, setHasRunAssignmentSearch] = useState(false)
   const [selectedEmpIds, setSelectedEmpIds] = useState<string[]>([])
   const [bulkStructure, setBulkStructure] = useState(ss[0]?.name ?? "")
   const [newSS, setNewSS] = useState({
@@ -7883,7 +7889,7 @@ function SalaryManagementView({
       toast("Salary component added", "success")
     }
   }
-  const filteredSalaryComponents = salaryComponents.filter(
+  const filteredSalaryComponents = hasRunComponentSearch ? salaryComponents.filter(
     (c) =>
       searchMatches(componentFilters.search, [
         c.name,
@@ -7896,8 +7902,8 @@ function SalaryManagementView({
       (componentFilters.taxable === "All" || c.taxable === componentFilters.taxable) &&
       (componentFilters.active === "All" ||
         (componentFilters.active === "Active" ? c.active : !c.active)),
-  )
-  const assignmentRows = emps.filter(
+  ) : []
+  const assignmentRows = hasRunAssignmentSearch ? emps.filter(
     (e) =>
       (appliedAssignFilters.assignDept === "All" || e.department === appliedAssignFilters.assignDept) &&
       (appliedAssignFilters.assignType === "All" || e.empType === appliedAssignFilters.assignType) &&
@@ -7915,13 +7921,14 @@ function SalaryManagementView({
       return a.salaryStructure.localeCompare(b.salaryStructure) * dir
     }
     return a.name.localeCompare(b.name) * dir
-  })
+  }) : []
   const pagedStructures = ss.slice((structurePage - 1) * salaryTablePageSize, structurePage * salaryTablePageSize)
   const pagedComponents = filteredSalaryComponents.slice((componentPage - 1) * salaryTablePageSize, componentPage * salaryTablePageSize)
   const pagedTemplates = ss.slice((templatePage - 1) * salaryTablePageSize, templatePage * salaryTablePageSize)
   const pagedAssignments = assignmentRows.slice((assignmentPage - 1) * salaryTablePageSize, assignmentPage * salaryTablePageSize)
 
   const applyAssignFilters = () => {
+    setHasRunAssignmentSearch(true)
     setAppliedAssignFilters({
       assignDept,
       assignType,
@@ -7931,6 +7938,7 @@ function SalaryManagementView({
     })
   }
   const clearAssignFilters = () => {
+    setHasRunAssignmentSearch(false)
     setAssignDept("All")
     setAssignType("All")
     setAssignDesignation("All")
@@ -8056,9 +8064,9 @@ function SalaryManagementView({
     setSalaryRunStatus(next)
     toast(`Salary workflow moved to ${next}`, "success")
   }
-  const filteredWizardEmployees = emps.filter((e) =>
+  const filteredWizardEmployees = hasRunWizardSearch ? emps.filter((e) =>
     searchMatches(appliedWizardSearch, [e.name, e.id, e.department, e.designation]),
-  )
+  ) : []
   const wizardTargetEmployees = (() => {
     if (salaryScope === "Specific Employees") {
       return emps.filter((e) => wizardSelectedIds.includes(e.id))
@@ -8427,13 +8435,14 @@ function SalaryManagementView({
               </select>
             </Fld>
             <div style={{ display: "flex", gap: 8 }}>
-              <Btn onClick={() => setComponentFilters(componentFilterDraft)}>Go</Btn>
+              <Btn onClick={() => { setComponentFilters(componentFilterDraft); setHasRunComponentSearch(true) }}>Go</Btn>
               <Btn
                 variant="secondary"
                 onClick={() => {
                   const empty = { search: "", kind: "All", type: "All", taxable: "All", active: "All" }
                   setComponentFilterDraft(empty)
                   setComponentFilters(empty)
+                  setHasRunComponentSearch(false)
                 }}
               >
                 Clear
@@ -9039,7 +9048,7 @@ function SalaryManagementView({
                       values={emps.map((e) => `${e.name} (${e.id})`)}
                     />
                     <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                      <Btn small onClick={() => setAppliedWizardSearch(wizardSearch)}>
+                      <Btn small onClick={() => { setAppliedWizardSearch(wizardSearch); setHasRunWizardSearch(true) }}>
                         Go
                       </Btn>
                       <Btn
@@ -9048,6 +9057,7 @@ function SalaryManagementView({
                         onClick={() => {
                           setWizardSearch("")
                           setAppliedWizardSearch("")
+                          setHasRunWizardSearch(false)
                         }}
                       >
                         Clear Filters
@@ -9620,6 +9630,7 @@ function PayRunsView({
   )
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(2) // 0: Attendance, 1: Additions, 2: Review, 3: Approval
   const [historyPage, setHistoryPage] = useState(1)
+  const [hasRunHistorySearch, setHasRunHistorySearch] = useState(false)
   const [calculationPage, setCalculationPage] = useState(1)
   const calculationPageSize = 5
 
@@ -9645,6 +9656,7 @@ function PayRunsView({
   const [runNote, setRunNote] = useState("Regular monthly payroll cycle")
   const [runEmployeeSearch, setRunEmployeeSearch] = useState("")
   const [appliedRunEmployeeSearch, setAppliedRunEmployeeSearch] = useState("")
+  const [hasRunRunEmployeeSearch, setHasRunRunEmployeeSearch] = useState(false)
   const [runSelectedIds, setRunSelectedIds] = useState<string[]>([])
   const [newMonth, setNewMonth] = useState(9)
   const [newYear, setNewYear] = useState(2026)
@@ -9692,9 +9704,9 @@ function PayRunsView({
                 ? 5
                 : 0
     : 0
-  const filteredRunEmployees = payrollEligibleEmployees.filter((e) =>
+  const filteredRunEmployees = hasRunRunEmployeeSearch ? payrollEligibleEmployees.filter((e) =>
     searchMatches(appliedRunEmployeeSearch, [e.name, e.id, e.department, e.designation]),
-  )
+  ) : []
   const guidedTargetEmployees = (() => {
     if (runScope === "Specific Employees") {
       return payrollEligibleEmployees.filter((e) => runSelectedIds.includes(e.id))
@@ -9723,6 +9735,7 @@ function PayRunsView({
 
   // Handle Filter Go Action
   const handleHistoryGo = () => {
+    setHasRunHistorySearch(true)
     setAppliedPeriod(periodDraft)
     setAppliedYear(yearDraft)
     setAppliedStatus(statusDraft)
@@ -9733,6 +9746,7 @@ function PayRunsView({
 
   // Handle Clear History Filters
   const handleHistoryClear = () => {
+    setHasRunHistorySearch(false)
     setPeriodDraft("")
     setYearDraft("all")
     setStatusDraft("all")
@@ -9748,7 +9762,7 @@ function PayRunsView({
   }
 
   // Filtered History Runs
-  const filteredHistory = payruns.filter((p) => {
+  const filteredHistory = hasRunHistorySearch ? payruns.filter((p) => {
     if (!searchMatches(appliedPeriod, [p.period])) {
       return false
     }
@@ -9766,7 +9780,7 @@ function PayRunsView({
       if (p.netPayroll < minVal) return false
     }
     return true
-  })
+  }) : []
 
   // Advance payrun status in lifecycle
   const advanceRunStatus = (pr: Payrun) => {
@@ -10922,7 +10936,7 @@ function PayRunsView({
                       values={payrollEligibleEmployees.map((e) => `${e.name} (${e.id})`)}
                     />
                     <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                      <Btn small onClick={() => setAppliedRunEmployeeSearch(runEmployeeSearch)}>
+                      <Btn small onClick={() => { setAppliedRunEmployeeSearch(runEmployeeSearch); setHasRunRunEmployeeSearch(true) }}>
                         Go
                       </Btn>
                       <Btn
@@ -10931,6 +10945,7 @@ function PayRunsView({
                         onClick={() => {
                           setRunEmployeeSearch("")
                           setAppliedRunEmployeeSearch("")
+                          setHasRunRunEmployeeSearch(false)
                         }}
                       >
                         Clear Filters
@@ -11165,6 +11180,7 @@ function PayslipsView({
   const [sortBy, setSortBy] = useState<"period" | "net" | "gross">("period")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [payslipPage, setPayslipPage] = useState(1)
+  const [hasRunPayslipSearch, setHasRunPayslipSearch] = useState(false)
   const [appliedPayslipListFilters, setAppliedPayslipListFilters] = useState({
     empSearch: myEmp?.name ?? "",
     selPeriod: "All",
@@ -11193,7 +11209,7 @@ function PayslipsView({
     }),
   )
 
-  const rows = allRows
+  const rows = hasRunPayslipSearch ? allRows
     .filter(({ row, run, emp: e }) => {
       const nameMatch = myEmp
         ? e.id === myEmp.id
@@ -11206,7 +11222,7 @@ function PayslipsView({
         (!appliedPayslipListFilters.netMin || row.netSalary >= parseInt(appliedPayslipListFilters.netMin) * 1000) &&
         (!appliedPayslipListFilters.netMax || row.netSalary <= parseInt(appliedPayslipListFilters.netMax) * 1000)
       )
-    })
+    }) : []
 
   const paginatedPayslipRows = rows.slice((payslipPage - 1) * 10, payslipPage * 10)
     .sort((a, b) => {
@@ -11224,6 +11240,7 @@ function PayslipsView({
     (!myEmp && activeSearch(appliedPayslipListFilters.empSearch) ? 1 : 0) +
     (appliedPayslipListFilters.sortBy !== "period" || appliedPayslipListFilters.sortDir !== "desc" ? 1 : 0)
   const applyPayslipFilters = () => {
+    setHasRunPayslipSearch(true)
     setPayslipPage(1)
     setAppliedPayslipListFilters({
       empSearch,
@@ -11237,6 +11254,7 @@ function PayslipsView({
     })
   }
   const clearAll = () => {
+    setHasRunPayslipSearch(false)
     setPayslipPage(1)
     setEmpSearch(myEmp?.name ?? "")
     setSelPeriod("All")
@@ -11720,7 +11738,7 @@ function ReportsView({
   payruns: Payrun[]
 }) {
   const toast = useToast()
-  const [active, setActive] = useState("payroll_summary")
+  const [active, setActive] = useState<string | null>(null)
   const [reportDraft, setReportDraft] = useState("payroll_summary")
   const [period, setPeriod] = useState("July 2026")
   const completedPeriods = payruns
@@ -11764,7 +11782,7 @@ function ReportsView({
         </label>
         <Btn onClick={() => setActive(reportDraft)}>Go</Btn>
       </div>
-      <div className="report-content">
+      {active && <div className="report-content">
         <div
           style={{
             background: F.card,
@@ -12029,7 +12047,7 @@ function ReportsView({
             </div>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   )
 }
@@ -12079,6 +12097,7 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
   const [deptDraft, setDeptDraft] = useState("all")
   const [scopeDraft, setScopeDraft] = useState("all")
   const [userPage, setUserPage] = useState(1)
+  const [hasRunUserSearch, setHasRunUserSearch] = useState(false)
 
   const [appliedSearch, setAppliedSearch] = useState("")
   const [appliedRole, setAppliedRole] = useState("all")
@@ -12103,6 +12122,7 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
 
   // Execute filter search on "Go"
   const handleGo = () => {
+    setHasRunUserSearch(true)
     setUserPage(1)
     setAppliedSearch(searchDraft)
     setAppliedRole(roleDraft)
@@ -12114,6 +12134,7 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
 
   // Clear all filters
   const handleClear = () => {
+    setHasRunUserSearch(false)
     setUserPage(1)
     setSearchDraft("")
     setRoleDraft("all")
@@ -12131,7 +12152,7 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
   }
 
   // Filter evaluation logic
-  const filteredUsers = users.filter((u) => {
+  const filteredUsers = hasRunUserSearch ? users.filter((u) => {
     if (!searchMatches(appliedSearch, [u.name, u.role])) {
       return false
     }
@@ -12148,7 +12169,7 @@ function AccessManagementView({ emps }: { emps: Employee[] }) {
       return false
     }
     return true
-  })
+  }) : []
   const paginatedUsers = filteredUsers.slice((userPage - 1) * 10, userPage * 10)
 
   const toggleLock = (u: UserRow) => {
@@ -12687,6 +12708,7 @@ function AuditHistoryView({
   const toast = useToast()
   const [tab, setTab] = useState<"audit" | "errors">("audit")
   const [auditPage, setAuditPage] = useState(1)
+  const [hasRunAuditSearch, setHasRunAuditSearch] = useState(false)
   const [filterDraft, setFilterDraft] = useState({
     search: "",
     module: "All",
@@ -12723,9 +12745,10 @@ function AuditHistoryView({
       withinDate(a.timestamp) &&
       searchMatches(appliedFilters.search, [a.issue, a.user, a.module, a.route, a.status, a.severity]),
   )
-  const activeFilteredRows = tab === "audit" ? filtered : filteredErrors
+  const activeFilteredRows = hasRunAuditSearch ? (tab === "audit" ? filtered : filteredErrors) : []
   const paginatedAuditRows = activeFilteredRows.slice((auditPage - 1) * 10, auditPage * 10)
   const clearFilters = () => {
+    setHasRunAuditSearch(false)
     const empty = {
       search: "",
       module: "All",
@@ -12740,6 +12763,7 @@ function AuditHistoryView({
     toast("Filters cleared", "info")
   }
   const applyFilters = () => {
+    setHasRunAuditSearch(true)
     setAuditPage(1)
     setAppliedFilters(filterDraft)
     toast("Filters applied", "success")
@@ -13726,6 +13750,7 @@ function PlatformAccessManagementView({
     fy: "All",
     sort: "name-asc",
   })
+  const [hasRunPlatformOrgSearch, setHasRunPlatformOrgSearch] = useState(false)
   const [searchDraft, setSearchDraft] = useState("")
   const [roleDraft, setRoleDraft] = useState("All")
   const [statusDraft, setStatusDraft] = useState("All")
@@ -13736,6 +13761,7 @@ function PlatformAccessManagementView({
     status: "All",
     sort: "name-asc",
   })
+  const [hasRunPlatformAdminSearch, setHasRunPlatformAdminSearch] = useState(false)
   const [showInvite, setShowInvite] = useState(false)
   const [inviteDraft, setInviteDraft] = useState({
     name: "",
@@ -13832,7 +13858,7 @@ function PlatformAccessManagementView({
   ]
   const orgFyOptions = ["All", ...Array.from(new Set(orgs.map((org) => org.financialYear)))]
 
-  const filteredOrgs = orgs
+  const filteredOrgs = (hasRunPlatformOrgSearch ? orgs : [])
     .filter((org) => {
       if (!searchMatches(orgFilters.search, [org.name, org.legalName, org.code, org.id, org.admin])) {
         return false
@@ -13851,7 +13877,7 @@ function PlatformAccessManagementView({
       return a.name.localeCompare(b.name) * dir
     })
 
-  const filteredAdmins = admins
+  const filteredAdmins = (hasRunPlatformAdminSearch ? admins : [])
     .filter((admin) => {
       if (!searchMatches(filters.search, [admin.name, admin.email, admin.role])) {
         return false
@@ -14163,7 +14189,8 @@ function PlatformAccessManagementView({
               </Fld>
               <Btn
                 style={{ alignSelf: "end", justifyContent: "center" }}
-                onClick={() =>
+                onClick={() => {
+                  setHasRunPlatformOrgSearch(true)
                   setOrgFilters({
                     search: orgSearchDraft,
                     status: orgStatusDraft,
@@ -14171,7 +14198,7 @@ function PlatformAccessManagementView({
                     fy: orgFyDraft,
                     sort: orgSortDraft,
                   })
-                }
+                }}
               >
                 Go
               </Btn>
@@ -14185,6 +14212,7 @@ function PlatformAccessManagementView({
                   setOrgFyDraft("All")
                   setOrgSortDraft("name-asc")
                   setOrgFilters({ search: "", status: "All", admin: "All", fy: "All", sort: "name-asc" })
+                  setHasRunPlatformOrgSearch(false)
                 }}
               >
                 Clear Filters
@@ -14539,7 +14567,7 @@ function PlatformAccessManagementView({
                   <option value="orgs-desc">Most Organizations</option>
                 </select>
               </Fld>
-              <Btn onClick={() => setFilters({ search: searchDraft, role: roleDraft, status: statusDraft, sort: sortDraft })}>
+              <Btn onClick={() => { setFilters({ search: searchDraft, role: roleDraft, status: statusDraft, sort: sortDraft }); setHasRunPlatformAdminSearch(true) }}>
                 Go
               </Btn>
               <Btn
@@ -14550,6 +14578,7 @@ function PlatformAccessManagementView({
                   setStatusDraft("All")
                   setSortDraft("name-asc")
                   setFilters({ search: "", role: "All", status: "All", sort: "name-asc" })
+                  setHasRunPlatformAdminSearch(false)
                 }}
               >
                 Clear Filters
@@ -14793,6 +14822,7 @@ function OrganizationsView({
   })
   const [selected, setSelected] = useState<string[]>([])
   const [filtersOpen, setFiltersOpen] = useState(true)
+  const [hasRunOrgSearch, setHasRunOrgSearch] = useState(false)
 
   const [page, setPage] = useState(1)
   const rowsPerPage = 15
@@ -14853,7 +14883,7 @@ function OrganizationsView({
     toast("Organization updated", "success")
   }
 
-  const filtered = orgs.filter((o) => {
+  const filtered = hasRunOrgSearch ? orgs.filter((o) => {
     return (
       searchMatches(appliedOrgFilters.search, [o.name, o.code, o.id, o.legalName, o.admin]) &&
       (!appliedOrgFilters.status || o.status === appliedOrgFilters.status) &&
@@ -14873,7 +14903,7 @@ function OrganizationsView({
       return a.country.localeCompare(b.country) * dir
     }
     return a.name.localeCompare(b.name) * dir
-  })
+  }) : []
 
   const totalPages = Math.ceil(filtered.length / rowsPerPage) || 1
   const paginated = filtered.slice((page - 1) * rowsPerPage, page * rowsPerPage)
@@ -14883,6 +14913,7 @@ function OrganizationsView({
       v.includes(id) ? v.filter((x) => x !== id) : [...v, id],
     )
   const resetFilters = () => {
+    setHasRunOrgSearch(false)
     setSearch("")
     setStatus("")
     setCountry("")
@@ -14899,6 +14930,7 @@ function OrganizationsView({
     })
   }
   const applyOrgFilters = () => {
+    setHasRunOrgSearch(true)
     setAppliedOrgFilters({ search, status, country, currency, fy, orgSort })
   }
   const orgActiveFilters =
@@ -20637,6 +20669,7 @@ function MySalaryView({
   const [componentSearch, setComponentSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<"all" | "earnings" | "deductions">("all")
   const [componentSort, setComponentSort] = useState("name-asc")
+  const [hasRunSalarySearch, setHasRunSalarySearch] = useState(false)
   const [appliedSalaryFilters, setAppliedSalaryFilters] = useState({
     componentSearch: "",
     categoryFilter: "all" as "all" | "earnings" | "deductions",
@@ -20734,7 +20767,7 @@ function MySalaryView({
   ]
 
   // Filtered earnings
-  const filteredEarnings = earningsComponents.filter((c) => {
+  const filteredEarnings = hasRunSalarySearch ? earningsComponents.filter((c) => {
     if (appliedSalaryFilters.categoryFilter === "deductions") return false
     return searchMatches(appliedSalaryFilters.componentSearch, [c.name, c.category])
   }).sort((a, b) => {
@@ -20743,10 +20776,10 @@ function MySalaryView({
       return (a.monthly - b.monthly) * dir
     }
     return a.name.localeCompare(b.name) * dir
-  })
+  }) : []
 
   // Filtered deductions
-  const filteredDeductions = deductionComponents.filter((d) => {
+  const filteredDeductions = hasRunSalarySearch ? deductionComponents.filter((d) => {
     if (appliedSalaryFilters.categoryFilter === "earnings") return false
     return searchMatches(appliedSalaryFilters.componentSearch, [d.name, d.type])
   }).sort((a, b) => {
@@ -20755,7 +20788,7 @@ function MySalaryView({
       return (a.monthly - b.monthly) * dir
     }
     return a.name.localeCompare(b.name) * dir
-  })
+  }) : []
 
   const hasFilter = Boolean(
     activeSearch(appliedSalaryFilters.componentSearch) ||
@@ -20763,9 +20796,11 @@ function MySalaryView({
       appliedSalaryFilters.componentSort !== "name-asc",
   )
   const applySalaryFilters = () => {
+    setHasRunSalarySearch(true)
     setAppliedSalaryFilters({ componentSearch, categoryFilter, componentSort })
   }
   const clearSalaryFilters = () => {
+    setHasRunSalarySearch(false)
     setComponentSearch("")
     setCategoryFilter("all")
     setComponentSort("name-asc")
@@ -21428,6 +21463,7 @@ function PayrollHistoryView({
     lopFilter: "all",
   })
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc")
+  const [hasRunPayrollHistorySearch, setHasRunPayrollHistorySearch] = useState(false)
   const [selectedRun, setSelectedRun] = useState<{
     run: Payrun
     row: PayrunInputRow
@@ -21448,7 +21484,7 @@ function PayrollHistoryView({
   // Apply filters
   const minNet = Number(appliedHistoryFilters.minNetFilter) || 0
   const maxNet = Number(appliedHistoryFilters.maxNetFilter) || Number.POSITIVE_INFINITY
-  const filteredRuns = runs
+  const filteredRuns = (hasRunPayrollHistorySearch ? runs : [])
     .filter(({ run, row }) => {
       // F4 Period filter / search
       if (!searchMatches(appliedHistoryFilters.periodSearch, [run.period])) {
@@ -21885,7 +21921,8 @@ function PayrollHistoryView({
 
         {/* Reset Filters */}
         <Btn
-          onClick={() =>
+          onClick={() => {
+            setHasRunPayrollHistorySearch(true)
             setAppliedHistoryFilters({
               periodSearch,
               yearFilter,
@@ -21895,7 +21932,7 @@ function PayrollHistoryView({
               deductionFilter,
               lopFilter,
             })
-          }
+          }}
           style={{ height: 34 }}
         >
           Go
@@ -21927,6 +21964,7 @@ function PayrollHistoryView({
                 deductionFilter: "all",
                 lopFilter: "all",
               })
+              setHasRunPayrollHistorySearch(false)
             }}
             style={{
               background: F.pageBg,
@@ -22292,6 +22330,7 @@ function EmployeePayslipsView({
   const [maxNetFilter, setMaxNetFilter] = useState("")
   const [deductionFilter, setDeductionFilter] = useState("all")
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc")
+  const [hasRunEmployeePayslipSearch, setHasRunEmployeePayslipSearch] = useState(false)
   const [appliedPayslipFilters, setAppliedPayslipFilters] = useState({
     periodSearch: "",
     selectedYear: "all",
@@ -22311,7 +22350,7 @@ function EmployeePayslipsView({
 
   const minNet = Number(appliedPayslipFilters.minNetFilter) || 0
   const maxNet = Number(appliedPayslipFilters.maxNetFilter) || Number.POSITIVE_INFINITY
-  const filteredRuns = runs.filter((run) => {
+  const filteredRuns = (hasRunEmployeePayslipSearch ? runs : []).filter((run) => {
     const row = run.rows.find((r) => r.empId === emp.id)
     if (!row) return false
     if (!searchMatches(appliedPayslipFilters.periodSearch, [run.period])) {
@@ -22474,7 +22513,8 @@ function EmployeePayslipsView({
         <ContextDateRangeFilter />
 
         <Btn
-          onClick={() =>
+          onClick={() => {
+            setHasRunEmployeePayslipSearch(true)
             setAppliedPayslipFilters({
               periodSearch,
               selectedYear,
@@ -22482,7 +22522,7 @@ function EmployeePayslipsView({
               maxNetFilter,
               deductionFilter,
             })
-          }
+          }}
           style={{ height: 34 }}
         >
           Go
@@ -22508,6 +22548,7 @@ function EmployeePayslipsView({
                 maxNetFilter: "",
                 deductionFilter: "all",
               })
+              setHasRunEmployeePayslipSearch(false)
             }}
             style={{
               background: F.pageBg,
@@ -22654,6 +22695,7 @@ function OrgDocumentsView({
   const [category, setCategory] = useState("All")
   const [status, setStatus] = useState("All")
   const [docSort, setDocSort] = useState("created-desc")
+  const [hasRunOrgDocumentSearch, setHasRunOrgDocumentSearch] = useState(false)
   const [appliedOrgDocFilters, setAppliedOrgDocFilters] = useState({
     search: "",
     category: "All",
@@ -22683,7 +22725,7 @@ function OrgDocumentsView({
     "HR Letter",
     "Tax",
   ]
-  const filteredDocs = docs.filter(
+  const filteredDocs = (hasRunOrgDocumentSearch ? docs : []).filter(
     (doc) =>
       searchMatches(appliedOrgDocFilters.search, [doc.title, doc.description, doc.assignedTo]) &&
       (appliedOrgDocFilters.category === "All" || doc.category === appliedOrgDocFilters.category) &&
@@ -22702,6 +22744,7 @@ function OrgDocumentsView({
     return (new Date(a.createdOn).getTime() - new Date(b.createdOn).getTime()) * dir
   })
   const clearOrgDocFilters = () => {
+    setHasRunOrgDocumentSearch(false)
     setSearch("")
     setCategory("All")
     setStatus("All")
@@ -22709,6 +22752,7 @@ function OrgDocumentsView({
     setAppliedOrgDocFilters({ search: "", category: "All", status: "All", docSort: "created-desc" })
   }
   const applyOrgDocFilters = () => {
+    setHasRunOrgDocumentSearch(true)
     setAppliedOrgDocFilters({ search, category, status, docSort })
   }
   const orgDocActiveFilters =
@@ -23032,6 +23076,7 @@ function DocumentsView({
   const [sourceFilter, setSourceFilter] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
   const [docSort, setDocSort] = useState("name-asc")
+  const [hasRunDocumentSearch, setHasRunDocumentSearch] = useState(false)
   const [appliedDocumentFilters, setAppliedDocumentFilters] = useState({
     docSearch: "",
     categoryFilter: "all",
@@ -23111,7 +23156,7 @@ function DocumentsView({
   const categories = Array.from(new Set(docs.map((d) => d.type)))
   const f4DocNames = docs.map((d) => d.name)
 
-  const filteredDocs = docs.filter((doc) => {
+  const filteredDocs = (hasRunDocumentSearch ? docs : []).filter((doc) => {
     if (!searchMatches(appliedDocumentFilters.docSearch, [doc.name])) {
       return false
     }
@@ -23182,6 +23227,7 @@ function DocumentsView({
       appliedDocumentFilters.docSort !== "name-asc",
   )
   const applyDocumentFilters = () => {
+    setHasRunDocumentSearch(true)
     setAppliedDocumentFilters({
       docSearch,
       categoryFilter,
@@ -23191,6 +23237,7 @@ function DocumentsView({
     })
   }
   const clearDocumentFilters = () => {
+    setHasRunDocumentSearch(false)
     setDocSearch("")
     setCategoryFilter("all")
     setSourceFilter("all")
