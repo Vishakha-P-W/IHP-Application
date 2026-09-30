@@ -4,6 +4,7 @@ import React, {
   useContext,
   useCallback,
   useEffect,
+  useRef,
   Fragment,
 } from "react"
 
@@ -105,6 +106,77 @@ function LiveClock() {
   )
 }
 
+function StrictDateInput({
+  value,
+  onChange,
+  style,
+  ariaLabel,
+}: {
+  value: string
+  onChange: (value: string) => void
+  style?: React.CSSProperties
+  ariaLabel?: string
+}) {
+  const toDisplayDate = (isoValue: string) => {
+    const match = isoValue.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    return match ? `${match[2]}/${match[3]}/${match[1]}` : ""
+  }
+  const [displayValue, setDisplayValue] = useState(() => toDisplayDate(value))
+  const pickerRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setDisplayValue(toDisplayDate(value))
+  }, [value])
+
+  const updateText = (nextValue: string) => {
+    const digits = nextValue.replace(/\D/g, "").slice(0, 8)
+    const formatted = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)]
+      .filter(Boolean)
+      .join("/")
+    setDisplayValue(formatted)
+    if (!digits) onChange("")
+    if (digits.length === 8) {
+      const month = digits.slice(0, 2)
+      const day = digits.slice(2, 4)
+      const year = digits.slice(4, 8)
+      onChange(`${year}-${month}-${day}`)
+    }
+  }
+
+  return (
+    <span style={{ position: "relative", display: "inline-block", width: style?.width ?? "100%" }}>
+      <input
+        aria-label={ariaLabel}
+        type="text"
+        inputMode="numeric"
+        placeholder="mm/dd/yyyy"
+        maxLength={10}
+        value={displayValue}
+        onChange={(event) => updateText(event.target.value)}
+        style={{ ...style, width: "100%", paddingRight: 38, boxSizing: "border-box" }}
+      />
+      <button
+        type="button"
+        aria-label={`${ariaLabel ?? "Date"} calendar`}
+        onClick={() => pickerRef.current?.showPicker?.()}
+        style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", border: 0, background: "transparent", cursor: "pointer", fontSize: 17, padding: 4 }}
+      >
+        ▣
+      </button>
+      <input
+        ref={pickerRef}
+        tabIndex={-1}
+        aria-hidden="true"
+        type="date"
+        max="9999-12-31"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none" }}
+      />
+    </span>
+  )
+}
+
 function DateRangeFilter({
   from,
   to,
@@ -121,11 +193,23 @@ function DateRangeFilter({
   return (
     <div className="sap-date-filter" style={{ padding: "0", marginBottom: 0, display: "flex", alignItems: "end", gap: 8, flexWrap: "nowrap", whiteSpace: "nowrap" }}>
       <div className="sap-date-filter-title" style={{ fontSize: 12, fontWeight: 800, color: F.text2, padding: "0 4px 9px 0" }}>Record date</div>
-      <label className="sap-date-field" style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>From<input aria-label="Filter from date" type="date" value={from} onChange={(event) => onFromChange(event.target.value)} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
-      <label className="sap-date-field" style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>To<input aria-label="Filter to date" type="date" value={to} onChange={(event) => onToChange(event.target.value)} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
+      <label className="sap-date-field" style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>From<StrictDateInput ariaLabel="Filter from date" value={from} onChange={onFromChange} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
+      <label className="sap-date-field" style={{ fontSize: 11, color: F.text2, fontWeight: 700 }}>To<StrictDateInput ariaLabel="Filter to date" value={to} onChange={onToChange} style={{ ...iSt, display: "block", marginTop: 4, width: 154 }} /></label>
       <Btn small onClick={onApply} style={{ height: 34, padding: "0 14px" }}>Apply range</Btn>
     </div>
   )
+}
+
+function limitDateYear(value: string) {
+  const parts = value.split("-")
+  if (parts.length > 1 && parts[0].length > 4) {
+    return [parts[0].slice(0, 4), ...parts.slice(1)].join("-")
+  }
+  const slashParts = value.split("/")
+  if (slashParts.length === 3 && slashParts[2].length > 4) {
+    return `${slashParts[0]}/${slashParts[1]}/${slashParts[2].slice(0, 4)}`
+  }
+  return value
 }
 
 const DateFilterCtx = createContext<{
@@ -2046,59 +2130,100 @@ function Stepper({ current }: { current: PayrunStatus }) {
   )
 }
 
+type PayslipPdfEntry = {
+  row: Pick<PayrunInputRow, "grossSalary" | "totalEarnings" | "pf" | "tds" | "profTax" | "totalDeductions" | "netSalary">
+  run: Pick<Payrun, "period" | "generatedOn">
+  emp: Pick<Employee, "name" | "id" | "department" | "designation" | "salaryStructure">
+}
+
+function downloadPayslipsPdf(entries: PayslipPdfEntry[]) {
+  if (entries.length === 0) return
+  const printWindow = window.open("", "_blank", "width=900,height=1100")
+  if (!printWindow) return
+  const title = entries.length === 1
+    ? `${entries[0].emp.name} Payslip ${entries[0].run.period}`
+    : `${entries.length} Selected Payslips`
+  const payslipSections = entries.map(({ row, run, emp }) => `
+    <section class="payslip">
+      <div class="header"><div><h1>Naxpayroll</h1><div>Naxrita Solutions Pvt. Ltd.</div></div><div><div>Payslip Period</div><h2>${run.period}</h2></div></div>
+      <div class="grid">
+        <div class="row"><span>Employee</span><strong>${emp.name} (${emp.id})</strong></div>
+        <div class="row"><span>Department</span><strong>${emp.department}</strong></div>
+        <div class="row"><span>Designation</span><strong>${emp.designation}</strong></div>
+        <div class="row"><span>Pay Date</span><strong>${fmtD(run.generatedOn)}</strong></div>
+        <div class="row"><span>Salary Structure</span><strong>${emp.salaryStructure}</strong></div>
+        <div class="row"><span>Status</span><strong>Completed</strong></div>
+      </div>
+      <div class="cols">
+        <div class="col"><h3>Earnings</h3><div class="row"><span>Gross Salary</span><strong>${inr(row.grossSalary)}</strong></div><div class="row"><span>Total Earnings</span><strong>${inr(row.totalEarnings)}</strong></div></div>
+        <div class="col ded"><h3>Deductions</h3><div class="row"><span>PF</span><strong>${inr(row.pf)}</strong></div><div class="row"><span>TDS</span><strong>${inr(row.tds)}</strong></div><div class="row"><span>Professional Tax</span><strong>${inr(row.profTax)}</strong></div><div class="row"><span>Total Deductions</span><strong>${inr(row.totalDeductions)}</strong></div></div>
+      </div>
+      <div class="net"><span>Net Pay</span><span>${inr(row.netSalary)}</span></div>
+    </section>
+  `).join("")
+  printWindow.document.write(`
+    <html>
+      <head>
+        <title>${title}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 28px; color: #32363A; }
+          .payslip { break-after: page; page-break-after: always; }
+          .payslip:last-child { break-after: auto; page-break-after: auto; }
+          .header { background: #354A5E; color: white; padding: 22px; display: flex; justify-content: space-between; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin: 22px 0; }
+          .row { display: flex; justify-content: space-between; border-bottom: 1px solid #D9D9D9; padding: 8px 0; }
+          .cols { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #D9D9D9; }
+          .col { padding: 18px; }
+          .net { margin-top: 0; padding: 18px; background: #F1FDF6; display: flex; justify-content: space-between; font-size: 24px; font-weight: 800; color: #107E3E; }
+          h3 { margin: 0 0 12px; color: #107E3E; }
+          .ded h3 { color: #BB0000; }
+          @media print { button { display: none; } body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <button onclick="window.print()" style="margin-bottom:16px;padding:10px 16px;background:#0070F2;color:white;border:0;border-radius:4px;font-weight:700;">Download / Save ${entries.length} PDF${entries.length === 1 ? "" : "s"}</button>
+        ${payslipSections}
+        <script>window.onload = () => window.print()</script>
+      </body>
+    </html>
+  `)
+  printWindow.document.close()
+}
+
+function downloadPayslipPdf(row: PayslipPdfEntry["row"], run: PayslipPdfEntry["run"], emp: PayslipPdfEntry["emp"]) {
+  downloadPayslipsPdf([{ row, run, emp }])
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  )
+}
+
+function payslipGeneratedDate(period: string) {
+  const [monthName, year = "2026"] = period.split(" ")
+  const month = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ].indexOf(monthName) + 1
+  return `${year}-${String(Math.max(month, 1)).padStart(2, "0")}-28`
+}
+
 function PayslipSheet({
   row,
   run,
   emp,
-  showDownload,
+  showDownload = true,
 }: {
   row: PayrunInputRow
   run: Payrun
   emp: Employee
   showDownload?: boolean
 }) {
-  const downloadPayslip = () => {
-    const printWindow = window.open("", "_blank", "width=900,height=1100")
-    if (!printWindow) return
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>${emp.name} Payslip ${run.period}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 28px; color: #32363A; }
-            .header { background: #354A5E; color: white; padding: 22px; display: flex; justify-content: space-between; }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin: 22px 0; }
-            .row { display: flex; justify-content: space-between; border-bottom: 1px solid #D9D9D9; padding: 8px 0; }
-            .cols { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #D9D9D9; }
-            .col { padding: 18px; }
-            .net { margin-top: 0; padding: 18px; background: #F1FDF6; display: flex; justify-content: space-between; font-size: 24px; font-weight: 800; color: #107E3E; }
-            h3 { margin: 0 0 12px; color: #107E3E; }
-            .ded h3 { color: #BB0000; }
-            @media print { button { display: none; } }
-          </style>
-        </head>
-        <body>
-          <button onclick="window.print()" style="margin-bottom:16px;padding:10px 16px;background:#0070F2;color:white;border:0;border-radius:4px;font-weight:700;">Download / Save PDF</button>
-          <div class="header"><div><h1>Naxpayroll</h1><div>Naxrita Solutions Pvt. Ltd.</div></div><div><div>Payslip Period</div><h2>${run.period}</h2></div></div>
-          <div class="grid">
-            <div class="row"><span>Employee</span><strong>${emp.name} (${emp.id})</strong></div>
-            <div class="row"><span>Department</span><strong>${emp.department}</strong></div>
-            <div class="row"><span>Designation</span><strong>${emp.designation}</strong></div>
-            <div class="row"><span>Pay Date</span><strong>${fmtD(run.generatedOn)}</strong></div>
-            <div class="row"><span>Salary Structure</span><strong>${emp.salaryStructure}</strong></div>
-            <div class="row"><span>Status</span><strong>Completed</strong></div>
-          </div>
-          <div class="cols">
-            <div class="col"><h3>Earnings</h3><div class="row"><span>Gross Salary</span><strong>${inr(row.grossSalary)}</strong></div><div class="row"><span>Total Earnings</span><strong>${inr(row.totalEarnings)}</strong></div></div>
-            <div class="col ded"><h3>Deductions</h3><div class="row"><span>PF</span><strong>${inr(row.pf)}</strong></div><div class="row"><span>TDS</span><strong>${inr(row.tds)}</strong></div><div class="row"><span>Professional Tax</span><strong>${inr(row.profTax)}</strong></div><div class="row"><span>Total Deductions</span><strong>${inr(row.totalDeductions)}</strong></div></div>
-          </div>
-          <div class="net"><span>Net Pay</span><span>${inr(row.netSalary)}</span></div>
-          <script>window.onload = () => window.print()</script>
-        </body>
-      </html>
-    `)
-    printWindow.document.close()
-  }
   const earnings = [
     ["Gross Salary", row.grossSalary],
     ["Bonus", row.bonus],
@@ -2222,12 +2347,8 @@ function PayslipSheet({
             padding: "12px 0 0",
           }}
         >
-          <Btn title="Download payslip PDF" onClick={downloadPayslip}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
+          <Btn title="Download payslip PDF" onClick={() => downloadPayslipPdf(row, run, emp)}>
+            <DownloadIcon />
             Download PDF
           </Btn>
         </div>
@@ -4338,7 +4459,7 @@ function EmployeeDetailPage({
         <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, padding: "20px 22px", marginTop: 14 }}>
           <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 18, display: "flex", justifyContent: "space-between" }}><span>Personal Information</span><span>{editingPersonal && <Btn small variant="success" onClick={() => { setEditingPersonal(false); toast("Personal information saved", "success") }}>Save</Btn>} <button aria-label="Edit personal information" onClick={() => setEditingPersonal(!editingPersonal)} style={{ border: "none", background: "transparent", color: F.brand, cursor: "pointer", fontSize: 17 }}>✎</button></span></div>
           <div className="employee-information-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", columnGap: 72, rowGap: 16 }}>
-            {[ ["Date of Birth", "dateOfBirth"], ["Personal Email", "personalEmail"], ["Father's Name", "fatherName"], ["Residential Address", "address"], ["PAN", "pan"], ["Differently Abled Type", "differentlyAbled"] ].map(([label, field]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "235px 1fr", fontSize: 13, alignItems: "center" }}><span style={{ color: F.text2 }}>{label}</span>{editingPersonal ? <input style={iSt} value={personalInfo[field as keyof typeof personalInfo]} onChange={(e) => setPersonalInfo({ ...personalInfo, [field]: e.target.value })} /> : <strong>{personalInfo[field as keyof typeof personalInfo]}</strong>}</div>)}
+            {[ ["Date of Birth", "dateOfBirth"], ["Personal Email", "personalEmail"], ["Father's Name", "fatherName"], ["Residential Address", "address"], ["PAN", "pan"], ["Differently Abled Type", "differentlyAbled"] ].map(([label, field]) => <div key={label} style={{ display: "grid", gridTemplateColumns: "235px 1fr", fontSize: 13, alignItems: "center" }}><span style={{ color: F.text2 }}>{label}</span>{editingPersonal ? <input style={iSt} maxLength={field === "dateOfBirth" ? 10 : undefined} value={personalInfo[field as keyof typeof personalInfo]} onChange={(e) => setPersonalInfo({ ...personalInfo, [field]: field === "dateOfBirth" ? limitDateYear(e.target.value) : e.target.value })} /> : <strong>{personalInfo[field as keyof typeof personalInfo]}</strong>}</div>)}
           </div>
         </div>
       </>}
@@ -4388,7 +4509,7 @@ function EmployeeDetailPage({
       {activeTab === "payslips" && (
         <div style={{ background: F.card, border: `1px solid ${F.border}`, borderRadius: 10, overflow: "hidden" }}>
           <div style={{ padding: "16px 20px", borderBottom: `1px solid ${F.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}><div><div style={{ fontWeight: 800 }}>Payslips & tax forms</div><div style={{ fontSize: 12, color: F.text2, marginTop: 3 }}>{editingPayslips ? "Update the payroll values for each issued period." : "Payroll documents issued specifically to this employee."}</div></div><div style={{ display: "flex", gap: 8 }}>{editingPayslips && <Btn small variant="secondary" onClick={() => setEditingPayslips(false)}>Cancel</Btn>}<Btn small variant={editingPayslips ? "success" : "secondary"} onClick={() => { if (editingPayslips) toast("Payslip adjustments saved", "success"); setEditingPayslips(!editingPayslips) }}>{editingPayslips ? "Save changes" : "Edit figures"}</Btn></div></div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><Th>Pay period</Th><Th>Gross earnings</Th><Th>Deductions</Th><Th>Net pay</Th><Th>Status</Th><Th>Action</Th></tr></thead><tbody>{payslipRows.map((row, i) => <TrH key={row.period}><Td><strong>{row.period}</strong><div style={{ fontSize: 11, color: F.text3 }}>Regular monthly payroll</div></Td><Td>{editingPayslips ? <input aria-label={`${row.period} gross`} type="number" min="0" style={{ ...iSt, width: 120 }} value={row.gross} onChange={(e) => setPayslipRows(payslipRows.map((item, index) => index === i ? { ...item, gross: Number(e.target.value) } : item))} /> : inr(row.gross)}</Td><Td>{editingPayslips ? <input aria-label={`${row.period} deductions`} type="number" min="0" style={{ ...iSt, width: 120 }} value={row.deductions} onChange={(e) => setPayslipRows(payslipRows.map((item, index) => index === i ? { ...item, deductions: Number(e.target.value) } : item))} /> : inr(row.deductions)}</Td><Td style={{ fontWeight: 800, color: F.success }}>{inr(row.gross - row.deductions)}</Td><Td>{editingPayslips ? <select aria-label={`${row.period} status`} style={{ ...iSt, width: 115 }} value={row.status} onChange={(e) => setPayslipRows(payslipRows.map((item, index) => index === i ? { ...item, status: e.target.value } : item))}><option>Available</option><option>Paid</option><option>On hold</option></select> : <Badge label={row.status} color={row.status === "On hold" ? F.warning : F.success} bg={row.status === "On hold" ? F.warningBg : F.successBg} />}</Td><Td><Btn small variant="secondary" onClick={() => toast(`${row.period} payslip opened`, "info")}>View payslip</Btn></Td></TrH>)}</tbody></table>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}><thead><tr><Th>Pay period</Th><Th>Gross earnings</Th><Th>Deductions</Th><Th>Net pay</Th><Th>Status</Th><Th>Action</Th></tr></thead><tbody>{payslipRows.map((row, i) => <TrH key={row.period}><Td><strong>{row.period}</strong><div style={{ fontSize: 11, color: F.text3 }}>Regular monthly payroll</div></Td><Td>{editingPayslips ? <input aria-label={`${row.period} gross`} type="number" min="0" style={{ ...iSt, width: 120 }} value={row.gross} onChange={(e) => setPayslipRows(payslipRows.map((item, index) => index === i ? { ...item, gross: Number(e.target.value) } : item))} /> : inr(row.gross)}</Td><Td>{editingPayslips ? <input aria-label={`${row.period} deductions`} type="number" min="0" style={{ ...iSt, width: 120 }} value={row.deductions} onChange={(e) => setPayslipRows(payslipRows.map((item, index) => index === i ? { ...item, deductions: Number(e.target.value) } : item))} /> : inr(row.deductions)}</Td><Td style={{ fontWeight: 800, color: F.success }}>{inr(row.gross - row.deductions)}</Td><Td>{editingPayslips ? <select aria-label={`${row.period} status`} style={{ ...iSt, width: 115 }} value={row.status} onChange={(e) => setPayslipRows(payslipRows.map((item, index) => index === i ? { ...item, status: e.target.value } : item))}><option>Available</option><option>Paid</option><option>On hold</option></select> : <Badge label={row.status} color={row.status === "On hold" ? F.warning : F.success} bg={row.status === "On hold" ? F.warningBg : F.successBg} />}</Td><Td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><Btn small variant="secondary" onClick={() => toast(`${row.period} payslip opened`, "info")}>View</Btn><Btn small title={`Download PDF payslip for ${row.period}`} onClick={() => downloadPayslipPdf({ grossSalary: row.gross, totalEarnings: row.gross, pf: Math.round(row.gross * 0.12), tds: Math.max(0, row.deductions - Math.round(row.gross * 0.12) - (row.gross > 15000 ? 200 : 150)), profTax: row.gross > 15000 ? 200 : 150, totalDeductions: row.deductions, netSalary: row.gross - row.deductions }, { period: row.period, generatedOn: payslipGeneratedDate(row.period) }, emp)}><DownloadIcon />Download PDF</Btn></div></Td></TrH>)}</tbody></table>
         </div>
       )}
 
@@ -4765,11 +4886,10 @@ function AddEmployeeWizardPage({
                 />
               </Fld>
               <Fld label="Date of Joining *">
-                <input
-                  type="date"
+                <StrictDateInput
                   style={iSt}
                   value={basic.doj}
-                  onChange={(e) => setBasic({ ...basic, doj: e.target.value })}
+                  onChange={(value) => setBasic({ ...basic, doj: value })}
                 />
               </Fld>
             </div>
@@ -5322,12 +5442,11 @@ function AddEmployeeWizardPage({
               }}
             >
               <Fld label="Date of Birth *">
-                <input
-                  type="date"
+                <StrictDateInput
                   style={iSt}
                   value={personal.dob}
-                  onChange={(e) =>
-                    setPersonal({ ...personal, dob: e.target.value })
+                  onChange={(value) =>
+                    setPersonal({ ...personal, dob: value })
                   }
                 />
               </Fld>
@@ -7465,12 +7584,11 @@ function EmployeesView({
               />
             </Fld>
             <Fld label="Date of Joining">
-              <input
-                type="date"
+              <StrictDateInput
                 style={iSt}
                 value={addForm.doj}
-                onChange={(e) =>
-                  setAddForm({ ...addForm, doj: e.target.value })
+                onChange={(value) =>
+                  setAddForm({ ...addForm, doj: value })
                 }
               />
             </Fld>
@@ -8284,10 +8402,11 @@ function SalaryManagementView({
                           </Btn>
                           <Btn
                             small
-                            variant="ghost"
-                            onClick={() => toast(`Payslip draft opened for ${row.emp.name}`, "info")}
+                            title={`Download PDF payslip for ${row.emp.name}`}
+                            onClick={() => downloadPayslipPdf({ grossSalary: row.gross, totalEarnings: row.gross, pf: row.pf, tds: row.tds, profTax: row.pt, totalDeductions: row.deductions, netSalary: row.net }, { period: salaryCycle, generatedOn: salaryDate }, row.emp)}
                           >
-                            Payslip
+                            <DownloadIcon />
+                            Download PDF
                           </Btn>
                         </div>
                       </Td>
@@ -8965,10 +9084,9 @@ function SalaryManagementView({
                     </select>
                   </Fld>
                   <Fld label="Disbursement / Pay Date">
-                    <input
-                      type="date"
+                    <StrictDateInput
                       value={salaryDate}
-                      onChange={(e) => setSalaryDate(e.target.value)}
+                      onChange={setSalaryDate}
                       style={iSt}
                     />
                   </Fld>
@@ -9284,10 +9402,9 @@ function SalaryManagementView({
                     </select>
                   </Fld>
                   <Fld label="Effective From">
-                    <input
-                      type="date"
+                    <StrictDateInput
                       value={draft.effectiveFrom}
-                      onChange={(e) => update({ effectiveFrom: e.target.value })}
+                      onChange={(value) => update({ effectiveFrom: value })}
                       style={iSt}
                     />
                   </Fld>
@@ -10396,10 +10513,15 @@ function PayRunsView({
                             </Btn>
                             <Btn
                               small
-                              variant="ghost"
-                              onClick={() => toast(`Payslip opened for ${row.empName}`, "info")}
+                              disabled={!isFinalizedPayrun(activeRun.status)}
+                              title={isFinalizedPayrun(activeRun.status) ? `Download PDF payslip for ${row.empName}` : "PDF is available after the pay run is completed"}
+                              onClick={() => {
+                                const employee = emps.find((item) => item.id === row.empId)
+                                if (employee) downloadPayslipPdf(row, activeRun, employee)
+                              }}
                             >
-                              Payslip
+                              <DownloadIcon />
+                              Download PDF
                             </Btn>
                           </div>
                         </td>
@@ -10859,11 +10981,11 @@ function PayRunsView({
                   </Fld>
 
                   <Fld label="Disbursement / Pay Date">
-                    <input
-                      type="date"
+                    <StrictDateInput
                       value={`${newYear}-${String(newMonth).padStart(2, "0")}-28`}
-                      onChange={(e) => {
-                        const [year, month] = e.target.value.split("-")
+                      onChange={(value) => {
+                        if (!value) return
+                        const [year, month] = value.split("-")
                         setNewYear(Number(year))
                         setNewMonth(Number(month))
                       }}
@@ -11192,6 +11314,7 @@ function PayslipsView({
     sortDir: "desc" as "asc" | "desc",
   })
   const [showAdv, setShowAdv] = useState(false)
+  const [selectedPayslipKeys, setSelectedPayslipKeys] = useState<string[]>([])
   const [viewSlip, setViewSlip] = useState<{
     row: PayrunInputRow
     run: Payrun
@@ -11232,6 +11355,15 @@ function PayslipsView({
       else d = a.run.year * 100 + a.run.month - (b.run.year * 100 + b.run.month)
       return appliedPayslipListFilters.sortDir === "asc" ? d : -d
     })
+  const payslipKey = (run: Payrun, row: PayrunInputRow) => `${run.id}:${row.empId}`
+  const pagePayslipKeys = paginatedPayslipRows.map(({ run, row }) => payslipKey(run, row))
+  const allPagePayslipsSelected = pagePayslipKeys.length > 0 && pagePayslipKeys.every((key) => selectedPayslipKeys.includes(key))
+  const selectedPayslips = allRows.filter(({ run, row }) => selectedPayslipKeys.includes(payslipKey(run, row)))
+  const togglePagePayslips = () => {
+    setSelectedPayslipKeys((current) => allPagePayslipsSelected
+      ? current.filter((key) => !pagePayslipKeys.includes(key))
+      : Array.from(new Set([...current, ...pagePayslipKeys])))
+  }
 
   const activeFilters =
     [appliedPayslipListFilters.selPeriod, appliedPayslipListFilters.deptF, appliedPayslipListFilters.typeF].filter((v) => v !== "All").length +
@@ -11321,23 +11453,19 @@ function PayslipsView({
           <div style={{ display: "flex", gap: 8 }}>
             <Btn
               variant="secondary"
-              onClick={() => toast("All payslips exported as ZIP", "success")}
+              disabled={selectedPayslips.length === 0}
+              onClick={() => downloadPayslipsPdf(selectedPayslips)}
             >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              Export All
+              <DownloadIcon />
+              Download Selected ({selectedPayslips.length})
+            </Btn>
+            <Btn
+              variant="secondary"
+              disabled={allRows.length === 0}
+              onClick={() => downloadPayslipsPdf(allRows)}
+            >
+              <DownloadIcon />
+              Download All
             </Btn>
           </div>
         }
@@ -11601,6 +11729,15 @@ function PayslipsView({
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
+              <Th>
+                <input
+                  type="checkbox"
+                  aria-label="Select all payslips on this page"
+                  checked={allPagePayslipsSelected}
+                  onChange={togglePagePayslips}
+                  style={{ width: 16, height: 16, cursor: "pointer" }}
+                />
+              </Th>
               {!myEmp && <Th>Employee</Th>}
               {!myEmp && <Th>Department</Th>}
               <Th>Pay Period</Th>
@@ -11617,7 +11754,7 @@ function PayslipsView({
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={myEmp ? 10 : 11}
                   style={{ padding: 48, textAlign: "center", color: F.text3 }}
                 >
                   No payslips match the selected filters.
@@ -11629,6 +11766,21 @@ function PayslipsView({
                 key={`${run.id}-${row.empId}`}
                 onClick={() => setViewSlip({ row, run })}
               >
+                <Td>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${e.name} payslip for ${run.period}`}
+                    checked={selectedPayslipKeys.includes(payslipKey(run, row))}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={() => setSelectedPayslipKeys((current) => {
+                      const key = payslipKey(run, row)
+                      return current.includes(key)
+                        ? current.filter((item) => item !== key)
+                        : [...current, key]
+                    })}
+                    style={{ width: 16, height: 16, cursor: "pointer" }}
+                  />
+                </Td>
                 {!myEmp && (
                   <Td>
                     <div
@@ -11692,7 +11844,7 @@ function PayslipsView({
                 <Td>{prBadge("Completed")}</Td>
                 <Td>
                   <div
-                    style={{ display: "flex", gap: 6 }}
+                    style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
                     onClick={(ev) => ev.stopPropagation()}
                   >
                     <Btn
@@ -11702,6 +11854,14 @@ function PayslipsView({
                       onClick={() => setViewSlip({ row, run })}
                     >
                       View
+                    </Btn>
+                    <Btn
+                      small
+                      title={`Download PDF payslip for ${e.name} - ${run.period}`}
+                      onClick={() => downloadPayslipPdf(row, run, e)}
+                    >
+                      <DownloadIcon />
+                      Download PDF
                     </Btn>
                   </div>
                 </Td>
@@ -12746,7 +12906,12 @@ function AuditHistoryView({
       searchMatches(appliedFilters.search, [a.issue, a.user, a.module, a.route, a.status, a.severity]),
   )
   const activeFilteredRows = hasRunAuditSearch ? (tab === "audit" ? filtered : filteredErrors) : []
-  const paginatedAuditRows = activeFilteredRows.slice((auditPage - 1) * 10, auditPage * 10)
+  const visibleAuditRows = hasRunAuditSearch
+    ? filtered.slice((auditPage - 1) * 10, auditPage * 10)
+    : []
+  const visibleErrorRows = hasRunAuditSearch
+    ? filteredErrors.slice((auditPage - 1) * 10, auditPage * 10)
+    : []
   const clearFilters = () => {
     setHasRunAuditSearch(false)
     const empty = {
@@ -12856,18 +13021,18 @@ function AuditHistoryView({
         </select>
         </Fld>
         <Fld label="Record Date From">
-          <input
-            type="date"
+          <StrictDateInput
+            ariaLabel="Record date from"
             value={filterDraft.dateFrom}
-            onChange={(e) => setFilterDraft({ ...filterDraft, dateFrom: e.target.value })}
+            onChange={(value) => setFilterDraft({ ...filterDraft, dateFrom: value })}
             style={iSt}
           />
         </Fld>
         <Fld label="Record Date To">
-          <input
-            type="date"
+          <StrictDateInput
+            ariaLabel="Record date to"
             value={filterDraft.dateTo}
-            onChange={(e) => setFilterDraft({ ...filterDraft, dateTo: e.target.value })}
+            onChange={(value) => setFilterDraft({ ...filterDraft, dateTo: value })}
             style={iSt}
           />
         </Fld>
@@ -12931,7 +13096,7 @@ function AuditHistoryView({
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 && (
+            {visibleAuditRows.length === 0 && (
               <tr>
                 <td
                   colSpan={6}
@@ -12942,11 +13107,11 @@ function AuditHistoryView({
                     fontSize: 13,
                   }}
                 >
-                  No matching audit events.
+                  {hasRunAuditSearch ? "No matching audit events." : "Select filters and click Go to load audit events."}
                 </td>
               </tr>
             )}
-            {filtered.slice((auditPage - 1) * 10, auditPage * 10).map((a) => (
+            {visibleAuditRows.map((a) => (
               <TrH key={a.id}>
                 <Td mono>
                   <span style={{ fontSize: 11, color: F.text2 }}>
@@ -13012,7 +13177,7 @@ function AuditHistoryView({
               </tr>
             </thead>
             <tbody>
-              {filteredErrors.length === 0 && (
+              {visibleErrorRows.length === 0 && (
                 <tr>
                   <td
                     colSpan={6}
@@ -13023,11 +13188,11 @@ function AuditHistoryView({
                       fontSize: 13,
                     }}
                   >
-                    No matching error events.
+                    {hasRunAuditSearch ? "No matching error events." : "Select filters and click Go to load error events."}
                   </td>
                 </tr>
               )}
-              {filteredErrors.slice((auditPage - 1) * 10, auditPage * 10).map((a) => (
+              {visibleErrorRows.map((a) => (
                 <TrH key={a.id}>
                   <Td mono>
                     <span style={{ fontSize: 11, color: F.text2 }}>
@@ -20102,18 +20267,18 @@ function EmployeeDashboardView({
             </div>
           </div>
           {latestCompleted && (
-            <Btn
-              onClick={() => onNav("payslips")}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontWeight: 700,
-              }}
-            >
-              <span>View Latest Payslip</span>
-              <span style={{ fontSize: 14 }}>&rarr;</span>
-            </Btn>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <Btn variant="secondary" onClick={() => onNav("payslips")}>
+                View Latest Payslip
+              </Btn>
+              <Btn
+                title={`Download PDF payslip for ${latestCompleted.run.period}`}
+                onClick={() => downloadPayslipPdf(latestCompleted.row, latestCompleted.run, emp)}
+              >
+                <DownloadIcon />
+                Download PDF
+              </Btn>
+            </div>
           )}
         </div>
       </div>
@@ -20474,19 +20639,24 @@ function EmployeeDashboardView({
                           }}
                         >
                           <button
-                            onClick={() => onNav("payslips")}
+                            onClick={() => downloadPayslipPdf(row, run, emp)}
+                            title={`Download PDF payslip for ${run.period}`}
                             style={{
-                              background: "transparent",
-                              border: "none",
+                              background: F.infoBg,
+                              border: `1px solid ${F.brand}30`,
                               color: F.brand,
                               fontWeight: 700,
                               cursor: "pointer",
                               fontSize: 12,
-                              padding: "4px 8px",
+                              padding: "6px 9px",
                               borderRadius: 4,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 5,
                             }}
                           >
-                            Open &rarr;
+                            <DownloadIcon />
+                            PDF
                           </button>
                         </td>
                       </tr>
@@ -21576,8 +21746,12 @@ function PayrollHistoryView({
             </p>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
+            <Btn onClick={() => downloadPayslipPdf(selectedRun.row, selectedRun.run, emp)}>
+              <DownloadIcon />
+              Download PDF
+            </Btn>
             {onNav && (
-              <Btn onClick={() => onNav("payslips")}>Open Full Payslip</Btn>
+              <Btn variant="secondary" onClick={() => onNav("payslips")}>Open Full Payslip</Btn>
             )}
             <Btn variant="secondary" onClick={() => setSelectedRun(null)}>
               Close
@@ -22112,24 +22286,29 @@ function PayrollHistoryView({
                       {prBadge(run.status)}
                     </td>
                     <td style={{ padding: "14px 18px", textAlign: "right" }}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedRun({ run, row })
-                        }}
-                        style={{
-                          background: "transparent",
-                          border: "none",
-                          color: F.brand,
-                          fontWeight: 700,
-                          cursor: "pointer",
-                          fontSize: 12,
-                          padding: "4px 8px",
-                          borderRadius: 4,
-                        }}
-                      >
-                        Details &rarr;
-                      </button>
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}>
+                        <Btn
+                          small
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedRun({ run, row })
+                          }}
+                        >
+                          Details
+                        </Btn>
+                        <Btn
+                          small
+                          title={`Download PDF payslip for ${run.period}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            downloadPayslipPdf(row, run, emp)
+                          }}
+                        >
+                          <DownloadIcon />
+                          Download PDF
+                        </Btn>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -22330,6 +22509,7 @@ function EmployeePayslipsView({
   const [maxNetFilter, setMaxNetFilter] = useState("")
   const [deductionFilter, setDeductionFilter] = useState("all")
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc")
+  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([])
   const [hasRunEmployeePayslipSearch, setHasRunEmployeePayslipSearch] = useState(false)
   const [appliedPayslipFilters, setAppliedPayslipFilters] = useState({
     periodSearch: "",
@@ -22374,6 +22554,19 @@ function EmployeePayslipsView({
     const bVal = b.year * 100 + b.month
     return sortOrder === "desc" ? bVal - aVal : aVal - bVal
   })
+  const allFilteredRunsSelected = filteredRuns.length > 0 && filteredRuns.every((run) => selectedRunIds.includes(run.id))
+  const selectedEmployeePayslips: PayslipPdfEntry[] = runs
+    .filter((run) => selectedRunIds.includes(run.id))
+    .flatMap((run) => {
+      const row = run.rows.find((item) => item.empId === emp.id)
+      return row ? [{ row, run, emp }] : []
+    })
+  const toggleFilteredRuns = () => {
+    const visibleIds = filteredRuns.map((run) => run.id)
+    setSelectedRunIds((current) => allFilteredRunsSelected
+      ? current.filter((id) => !visibleIds.includes(id))
+      : Array.from(new Set([...current, ...visibleIds])))
+  }
 
   const hasPayslipFilters = Boolean(
     activeSearch(appliedPayslipFilters.periodSearch) ||
@@ -22411,8 +22604,17 @@ function EmployeePayslipsView({
             Secure digital payslip archive & salary statements
           </p>
         </div>
-        <div style={{ fontSize: 12, color: F.text3, fontWeight: 600 }}>
-          {filteredRuns.length} Payslip{filteredRuns.length !== 1 ? "s" : ""} Available
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <div style={{ fontSize: 12, color: F.text3, fontWeight: 600 }}>
+            {filteredRuns.length} Payslip{filteredRuns.length !== 1 ? "s" : ""} Available
+          </div>
+          <Btn
+            disabled={selectedEmployeePayslips.length === 0}
+            onClick={() => downloadPayslipsPdf(selectedEmployeePayslips)}
+          >
+            <DownloadIcon />
+            Download Selected ({selectedEmployeePayslips.length})
+          </Btn>
         </div>
       </div>
 
@@ -22590,6 +22792,15 @@ function EmployeePayslipsView({
                 letterSpacing: "0.04em",
               }}
             >
+              <th style={{ padding: "12px 10px", textAlign: "center" }}>
+                <input
+                  type="checkbox"
+                  aria-label="Select all filtered payslips"
+                  checked={allFilteredRunsSelected}
+                  onChange={toggleFilteredRuns}
+                  style={{ width: 16, height: 16, cursor: "pointer" }}
+                />
+              </th>
               <th style={{ padding: "12px 18px", textAlign: "left" }}>Pay Period</th>
                 <th style={{ padding: "12px 14px", textAlign: "left" }}>Generated On</th>
                 <th style={{ padding: "12px 14px", textAlign: "right" }}>Gross Earnings</th>
@@ -22602,7 +22813,7 @@ function EmployeePayslipsView({
           <tbody>
             {filteredRuns.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: 40, textAlign: "center", color: F.text3 }}>
+                <td colSpan={8} style={{ padding: 40, textAlign: "center", color: F.text3 }}>
                   No payslips match your search criteria.
                 </td>
               </tr>
@@ -22621,6 +22832,18 @@ function EmployeePayslipsView({
                     onMouseEnter={(e) => (e.currentTarget.style.background = F.pageBg)}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                   >
+                    <td style={{ padding: "14px 10px", textAlign: "center" }}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select payslip for ${run.period}`}
+                        checked={selectedRunIds.includes(run.id)}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={() => setSelectedRunIds((current) => current.includes(run.id)
+                          ? current.filter((id) => id !== run.id)
+                          : [...current, run.id])}
+                        style={{ width: 16, height: 16, cursor: "pointer" }}
+                      />
+                    </td>
                     <td style={{ padding: "14px 18px" }}>
                       <div style={{ fontWeight: 800, color: F.text1 }}>{run.period}</div>
                       <div style={{ fontSize: 11, color: F.text3, marginTop: 2 }}>
@@ -22645,15 +22868,29 @@ function EmployeePayslipsView({
                       <Badge label="Completed" color={F.success} bg={F.successBg} />
                     </td>
                     <td style={{ padding: "14px 18px", textAlign: "right" }}>
-                      <Btn
-                        small
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelected({ run, row })
-                        }}
-                      >
-                        View Payslip &rarr;
-                      </Btn>
+                      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, flexWrap: "wrap" }}>
+                        <Btn
+                          small
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelected({ run, row })
+                          }}
+                        >
+                          View
+                        </Btn>
+                        <Btn
+                          small
+                          title={`Download PDF payslip for ${run.period}`}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            downloadPayslipPdf(row, run, emp)
+                          }}
+                        >
+                          <DownloadIcon />
+                          Download PDF
+                        </Btn>
+                      </div>
                     </td>
                   </tr>
                 )
